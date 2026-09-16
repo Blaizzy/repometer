@@ -1,0 +1,5 @@
+import http from 'node:http';
+import {readFile,stat} from 'node:fs/promises';
+const root=new URL('../web/',import.meta.url),types={html:'text/html; charset=utf-8',css:'text/css; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',json:'application/json'};
+const server=http.createServer(async(request,response)=>{try{const url=new URL(request.url,'http://127.0.0.1:4177');if(url.pathname==='/'){response.writeHead(302,{location:'/repometer/'});response.end();return;}if(!url.pathname.startsWith('/repometer/'))throw Error('Not found');let file=url.pathname.slice('/repometer/'.length)||'index.html';if(file==='compare/'||file==='compare'){response.writeHead(302,{location:'/repometer/compare.html'+url.search});response.end();return;}if(!/^[-a-z0-9]+\.(html|css|js|mjs|json)$/.test(file))throw Error('Not found');const body=await readFile(new URL(file,root));response.writeHead(200,{'content-type':types[file.split('.').at(-1)],'cache-control':'no-store'});response.end(body);}catch{response.writeHead(404);response.end('Not found');}});
+server.listen(4177,'127.0.0.1',()=>console.log('Local: http://127.0.0.1:4177/repometer/'));

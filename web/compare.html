@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f6f8f9">
+<title>Compare repositories · Repometer</title>
+<meta name="description" content="Compare public GitHub repository and folder line counts side by side, with matching filters and file-type breakdowns.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23172222'/%3E%3Cpath d='m12 9-7 7 7 7m8-14 7 7-7 7' fill='none' stroke='%2393ebc5' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./style.css?v=6"><link rel="stylesheet" href="./compare.css?v=6">
+<script type="module" src="./compare.js?v=9"></script>
+<link rel="stylesheet" href="./auth.css?v=9">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header"><a class="brand" href="./"><span class="brand-icon" aria-hidden="true">〈/〉</span><span>repo<span class="brand-light">meter</span></span></a><span class="header-label">GITHUB WORKSPACE</span><nav class="workspace-nav" aria-label="Workspace"><a href="./">Search repositories</a><a href="./compare.html" aria-current="page">Compare repos</a></nav></header>
+<main id="main" class="compare-page">
+ <div class="compare-heading"><p class="eyebrow">REPOSITORY COMPARISON</p><h1>Compare repositories</h1><p>Compare two public repositories, or narrow either side to a folder.</p></div>
+ <form id="compare-form">
+  <div class="compare-inputs">
+   <fieldset class="repo-input" id="left-fields"><legend><span class="side-mark">A</span>First repository</legend><label for="left-repo">Repository or GitHub URL<input id="left-repo" name="left" placeholder="Blaizzy/mlx-vlm" required autocomplete="off" spellcheck="false"></label><div class="repo-options"><label for="left-ref">Branch, tag, or commit<input id="left-ref" name="leftRef" placeholder="Default branch" autocomplete="off" spellcheck="false"></label><label for="left-path">Folder (optional)<input id="left-path" name="leftPath" placeholder="Entire repository" autocomplete="off" spellcheck="false"></label></div><p id="left-progress" class="repo-progress" aria-live="polite"></p></fieldset>
+   <fieldset class="repo-input" id="right-fields"><legend><span class="side-mark side-b">B</span>Second repository</legend><label for="right-repo">Repository or GitHub URL<input id="right-repo" name="right" placeholder="Blaizzy/mlx-audio" required autocomplete="off" spellcheck="false"></label><div class="repo-options"><label for="right-ref">Branch, tag, or commit<input id="right-ref" name="rightRef" placeholder="Default branch" autocomplete="off" spellcheck="false"></label><label for="right-path">Folder (optional)<input id="right-path" name="rightPath" placeholder="Entire repository" autocomplete="off" spellcheck="false"></label></div><p id="right-progress" class="repo-progress" aria-live="polite"></p></fieldset>
+  </div>
+  <div class="compare-form-actions"><p>Blank branch and folder fields use the pasted URL, or the whole default branch.</p><button class="primary-button" id="compare-submit" type="submit">Compare repositories</button></div>
+ </form>
+ <div id="compare-error" class="error" role="alert" hidden><span id="compare-error-message"></span> <button id="compare-retry" type="button" hidden>Try again</button></div>
+ <div class="scope-row compare-controls"><fieldset><legend class="visually-hidden">Files to include in both repositories</legend><label><input type="radio" name="compare-scope" value="all" checked><span>All text files</span></label><label><input type="radio" name="compare-scope" value="source"><span>Python + JSON</span></label><label><input type="radio" name="compare-scope" value="python"><span>Python only</span></label></fieldset><label class="type-control" for="compare-type">File type<select id="compare-type"><option value="">All types</option></select></label></div>
+ <div class="refresh-row"><p id="compare-status" class="compare-status" role="status">The same file filter applies to both repositories.</p><div class="refresh-actions"><button id="compare-cancel" type="button" hidden>Cancel</button><button id="compare-refresh" type="button" disabled>↻ Refresh now</button></div></div>
+ <div id="compare-empty" class="compare-empty">Choose two repositories above to see their line counts side by side.</div>
+ <section id="compare-results" hidden aria-label="Repository comparison" aria-busy="false">
+  <div id="repo-totals" class="repo-totals"></div>
+  <section class="difference-summary" aria-label="Difference between repositories"><h2>Difference · B − A</h2><strong id="compare-difference"></strong><p id="compare-percent"></p></section>
+  <p id="compare-exclusions" class="table-note"></p><p id="compare-updated" class="comparison-updated"></p>
+  <section class="files-section"><div class="table-heading"><div><h2>Lines by file type</h2><p>Same scope on both sides · positive differences mean more lines in B</p></div></div><div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable comparison by file type"><table class="type-table"><caption class="visually-hidden">Line counts by file type for repositories A and B</caption><thead><tr><th scope="col">File type</th><th scope="col" class="number">A</th><th scope="col" class="number">B</th><th scope="col" class="number">B − A</th></tr></thead><tbody id="compare-types"></tbody><tfoot><tr><th scope="row">Total</th><td class="number" id="compare-total-a"></td><td class="number" id="compare-total-b"></td><td class="number" id="compare-total-delta"></td></tr></tfoot></table></div></section>
+ </section>
+ <details class="methodology"><summary><span><span class="info-icon" aria-hidden="true">i</span>How this comparison works</span><span class="details-plus" aria-hidden="true">+</span></summary><div class="method-content"><p>Both repositories use physical line counts, including comments, blank lines, and a final line without a newline. Documentation, generated files, and vendored text are included. Folders include all their subfolders.</p><p>Common binary file types, non-UTF-8 files, symlinks, and submodules are excluded. Filters apply equally to both sides. File types are grouped by extension.</p><p>Each repository is counted at its displayed commit. The comparison updates only after both counts finish. It checks for changes every two minutes while connected to GitHub, or five minutes without authentication, while visible; previous complete counts stay visible if an update fails. Editing a repository, branch, or folder pauses refresh until you compare again.</p><p>This compares codebase sizes; it does not compare matching files, code quality, or Git history. Public repositories only.</p></div></details>
+ <footer><a class="footer-brand" href="./">〈/〉 <strong>Repometer</strong></a><span>Repositories. Folders. Pull requests.</span></footer>
+ <div id="compare-announcement" class="visually-hidden" aria-live="polite" role="status"></div>
+</main>
+</body>
+</html>

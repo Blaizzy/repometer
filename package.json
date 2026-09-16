@@ -1,0 +1,15 @@
+{
+  "name": "repometer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Live line counts for GitHub repositories, folders, pull requests, and side-by-side comparisons.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test scripts/*.test.mjs server/scripts/*.test.mjs",
+    "dev": "node scripts/preview.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,4 @@
+import {sqliteTable,text,integer,index} from 'drizzle-orm/sqlite-core';
+export const githubConfig=sqliteTable('github_config',{id:text('id').primaryKey(),payload:text('payload').notNull()});
+export const oauthTransactions=sqliteTable('oauth_transactions',{stateHash:text('state_hash').primaryKey(),userId:text('user_id').notNull(),browserHash:text('browser_hash').notNull(),kind:text('kind').notNull(),payload:text('payload').notNull(),expiresAt:integer('expires_at').notNull()},table=>[index('oauth_transactions_expiry').on(table.expiresAt)]);
+export const githubSessions=sqliteTable('github_sessions',{sessionHash:text('session_hash').primaryKey(),userId:text('user_id').notNull(),login:text('login').notNull(),token:text('token').notNull(),expiresAt:integer('expires_at').notNull()},table=>[index('github_sessions_expiry').on(table.expiresAt)]);
