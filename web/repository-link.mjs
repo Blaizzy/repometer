@@ -1,4 +1,4 @@
-import {githubAccess} from './github-access.mjs?v=9';
+import {githubAccess} from './github-access.mjs?v=11';
 
 const API_URL='https://api.github.com/repos/Blaizzy/repometer';
 const CACHE_KEY='repometer.repository-stars.v1';

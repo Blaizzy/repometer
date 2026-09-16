@@ -44,20 +44,19 @@ export async function unseal(value,secret,context){
   const [iv,data]=value.split('.');const key=await crypto.subtle.importKey('raw',unb64(secret),{name:'AES-GCM'},false,['decrypt']);
   const decrypted=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(iv),additionalData:encoder.encode(context)},key,unb64(data));return JSON.parse(decoder.decode(decrypted));
 }
-function owner(request,env){return !!user(request)&&!!env.SITE_OWNER_EMAIL&&request.headers.get('oai-authenticated-user-email')?.toLowerCase()===env.SITE_OWNER_EMAIL.toLowerCase();}
-function user(request){return request.headers.get('oai-authenticated-user-id');}
-function flowUser(request,kind){return kind==='setup'?user(request):'pages';}
 function bearer(request){const value=request.headers.get('authorization')||'';return /^Bearer [A-Za-z0-9_-]{43}$/.test(value)?value.slice(7):null;}
 function origin(env){const url=new URL(env.SITE_ORIGIN);if(url.protocol!=='https:')throw Error('Invalid site origin');return url.origin;}
 function sameOrigin(request,env){return request.headers.get('origin')===new URL(env.FRONTEND_URL).origin;}
 function errorPage(message,status=400){return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GitHub connection · Repometer</title><link rel="stylesheet" href="/style.css"><main><h1>GitHub connection</h1><p>${esc(message)}</p><p><a href="/">Return to Repometer</a></p></main></html>`,{status,headers:{...safeHeaders,'content-type':'text/html; charset=utf-8'}});}
-async function configuration(env){if(env.GITHUB_CLIENT_ID&&env.GITHUB_CLIENT_SECRET)return {clientId:env.GITHUB_CLIENT_ID,clientSecret:env.GITHUB_CLIENT_SECRET};const row=await env.DB.prepare('SELECT payload FROM github_config WHERE id = ?').bind('app').first();return row?unseal(row.payload,env.GITHUB_SESSION_KEY,'github-app'):null;}
+async function configuration(env){
+  return env.GITHUB_CLIENT_ID&&env.GITHUB_CLIENT_SECRET?{clientId:env.GITHUB_CLIENT_ID,clientSecret:env.GITHUB_CLIENT_SECRET}:null;
+}
 async function transaction(request,env,kind,returnTo){
   const state=random(),browser=random(),verifier=random(),stateHash=await hash(state),payload=await seal({returnTo:safeReturnTo(returnTo,env),verifier,clientChallenge:new URL(request.url).searchParams.get('challenge'),clientState:new URL(request.url).searchParams.get('client_state')},env.GITHUB_SESSION_KEY,'flow:'+stateHash);
   await env.DB.batch([
     env.DB.prepare('DELETE FROM oauth_transactions WHERE expires_at < ?').bind(Date.now()),
     env.DB.prepare('DELETE FROM github_sessions WHERE expires_at < ?').bind(Date.now()),
-    env.DB.prepare('INSERT INTO oauth_transactions (state_hash, user_id, browser_hash, kind, payload, expires_at) VALUES (?, ?, ?, ?, ?, ?)').bind(stateHash,flowUser(request,kind),await hash(browser),kind,payload,Date.now()+600_000)
+    env.DB.prepare('INSERT INTO oauth_transactions (state_hash, user_id, browser_hash, kind, payload, expires_at) VALUES (?, ?, ?, ?, ?, ?)').bind(stateHash,'pages',await hash(browser),kind,payload,Date.now()+600_000)
   ]);
   return {state,verifier,cookie:cookie(FLOW_COOKIE,browser,600)};
 }
@@ -65,7 +64,7 @@ async function consume(request,env,kind){
   const url=new URL(request.url),state=url.searchParams.get('state'),browser=cookies(request)[FLOW_COOKIE];
   if(!/^[A-Za-z0-9_-]{43}$/.test(state||'')||!/^[A-Za-z0-9_-]{43}$/.test(browser||''))return null;
   const stateHash=await hash(state);
-  const row=await env.DB.prepare('DELETE FROM oauth_transactions WHERE state_hash = ? AND user_id = ? AND browser_hash = ? AND kind = ? AND expires_at > ? RETURNING payload').bind(stateHash,flowUser(request,kind),await hash(browser),kind,Date.now()).first();
+  const row=await env.DB.prepare('DELETE FROM oauth_transactions WHERE state_hash = ? AND user_id = ? AND browser_hash = ? AND kind = ? AND expires_at > ? RETURNING payload').bind(stateHash,'pages',await hash(browser),kind,Date.now()).first();
   return row?unseal(row.payload,env.GITHUB_SESSION_KEY,'flow:'+stateHash):null;
 }
 async function session(request,env){
@@ -79,30 +78,11 @@ function githubOptions(headers={}){return {redirect:'manual',signal:AbortSignal.
 async function route(request,env,{fetchImpl=(...args)=>globalThis.fetch(...args)}={}){
   const url=new URL(request.url),path=url.pathname;
   if(!path.startsWith('/auth/github/')&&!path.startsWith('/api/github'))return null;
-  if(!env.DB||!env.GITHUB_SESSION_KEY||!env.SITE_ORIGIN||!env.SITE_OWNER_EMAIL||!env.FRONTEND_URL)return json({error:'GitHub sign-in is not configured yet.'},503);
+  if(!env.DB||!env.GITHUB_SESSION_KEY||!env.SITE_ORIGIN||!env.FRONTEND_URL)return json({error:'GitHub sign-in is not configured yet.'},503);
   try {
     if(path==='/api/github/session'&&request.method==='GET'){
       const config=await configuration(env),active=await session(request,env);
-      return json({available:true,configured:!!config,canSetup:owner(request,env),connected:!!active,login:active?.login||'',expiresAt:active?.expires_at||0,mode:active?'oauth':null});
-    }
-    if(path==='/auth/github/setup'&&request.method==='GET'){
-      if(!owner(request,env))return errorPage('Only the Site owner can set up GitHub sign-in.',403);
-      if(await configuration(env))return redirect(safeReturnTo(url.searchParams.get('returnTo'),env));
-      const flow=await transaction(request,env,'setup',url.searchParams.get('returnTo'));
-      const siteOrigin=origin(env),manifest={name:'Repometer by Blaizzy',url:env.FRONTEND_URL,description:'Read public GitHub repositories to compare physical line counts.',redirect_url:siteOrigin+'/auth/github/setup/callback',callback_urls:[siteOrigin+'/auth/github/callback'],public:true,default_permissions:{},default_events:[],hook_attributes:{url:siteOrigin+'/auth/github/webhook',active:false}};
-      return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Set up GitHub sign-in · Repometer</title><link rel="stylesheet" href="/style.css"><main><p class="eyebrow">ONE-TIME SETUP</p><h1>Connect this counter to GitHub</h1><p>Create the Repometer GitHub App in your account. It will only read public resources, with no extra repository or account permissions.</p><form method="post" action="https://github.com/settings/apps/new?state=${flow.state}"><input type="hidden" name="manifest" value="${esc(JSON.stringify(manifest))}"><button class="primary-button" type="submit">Continue to GitHub</button></form><p>Your GitHub sign-in credentials stay encrypted on this Site’s server.</p></main></html>`,{headers:{...safeHeaders,'content-type':'text/html; charset=utf-8','set-cookie':flow.cookie}});
-    }
-    if(path==='/auth/github/setup/callback'&&request.method==='GET'){
-      if(!owner(request,env))return errorPage('Only the Site owner can finish setup.',403);
-      const flow=await consume(request,env,'setup');if(!flow)return errorPage('The setup request expired or did not match this browser. Start setup again.');
-      const code=url.searchParams.get('code');if(!/^[A-Za-z0-9_-]{10,256}$/.test(code||''))return errorPage('GitHub did not finish the app registration. Start setup again.');
-      if(await configuration(env))return redirect(flow.returnTo,[clearCookie(FLOW_COOKIE)]);
-      const response=await fetchImpl('https://api.github.com/app-manifests/'+encodeURIComponent(code)+'/conversions',{...githubOptions(),method:'POST'});
-      if(!response.ok)return errorPage('GitHub could not complete the app registration. Return to the counter and try setup again.',502);
-      const app=await response.json();if(typeof app.client_id!=='string'||typeof app.client_secret!=='string')return errorPage('GitHub did not return the app credentials.',502);
-      const payload=await seal({clientId:app.client_id,clientSecret:app.client_secret,appId:app.id,name:app.name},env.GITHUB_SESSION_KEY,'github-app');
-      await env.DB.prepare('INSERT INTO github_config (id, payload) VALUES (?, ?) ON CONFLICT(id) DO NOTHING').bind('app',payload).run();
-      return redirect(flow.returnTo,[clearCookie(FLOW_COOKIE)]);
+      return json({available:true,configured:!!config,canSetup:false,connected:!!active,login:active?.login||'',expiresAt:active?.expires_at||0,mode:active?'oauth':null});
     }
     if(path==='/auth/github/start'&&request.method==='GET'){
       const config=await configuration(env);if(!config)return errorPage('GitHub sign-in is being configured. Please try again soon.',503);
@@ -144,7 +124,7 @@ async function route(request,env,{fetchImpl=(...args)=>globalThis.fetch(...args)
       return json({sessionToken:sessionValue,login:active.login,expiresAt:active.expires_at,mode:'oauth'});
     }
     if(path==='/api/github/logout'&&request.method==='POST'){
-      if(!sameOrigin(request,env))return json({error:'Disconnect must come from this Site.'},403);
+      if(!sameOrigin(request,env))return json({error:'Disconnect must come from Repometer.'},403);
       const value=bearer(request);if(value)await env.DB.prepare('DELETE FROM github_sessions WHERE session_hash = ? AND user_id = ?').bind(await hash(value),'pages').run();
       return json({connected:false});
     }

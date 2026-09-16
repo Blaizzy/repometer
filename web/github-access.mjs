@@ -1,5 +1,5 @@
-import {siteConfig} from './site-config.mjs';
-const CONNECTION_KEY='repometer.github.pat.v1',COOLDOWN_KEY='repometer.github.cooldowns.v1',OAUTH_KEY='repometer.github.session.v1',PENDING_KEY='repometer.github.pending.v1';
+import {siteConfig} from './site-config.mjs?v=2';
+const CONNECTION_KEY='repometer.github.pat.v1',COOLDOWN_KEY='repometer.github.cooldowns.v1',OAUTH_KEY='repometer.github.session.v2',PENDING_KEY='repometer.github.pending.v2';
 const validSession=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{43}$/.test(value);
 const base64=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 const random=()=>base64(crypto.getRandomValues(new Uint8Array(32)));

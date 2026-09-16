@@ -6,3 +6,5 @@ dist/
 .dev.vars
 .local/
 .DS_Store
+.wrangler/
+.dev.vars.*

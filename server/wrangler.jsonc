@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "repometer-auth",
+  "main": "worker/index.js",
+  "account_id": "4c6381784523a2521cfbc9c8cd502dc2",
+  "compatibility_date": "2026-09-16",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "vars": {
+    "SITE_ORIGIN": "https://repometer-auth.prince-gdt.workers.dev",
+    "FRONTEND_URL": "https://blaizzy.github.io/repometer/"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "repometer-auth",
+      "database_id": "9b61f64a-6a66-4156-9b17-50799954afae",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}
