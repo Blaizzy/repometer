@@ -12,7 +12,7 @@ export async function build({authOrigin=process.env.AUTH_ORIGIN||'',requireAuthO
   await rm(output,{recursive:true,force:true});await mkdir(output,{recursive:true});
   let count=0;
   for(const entry of await readdir(source,{withFileTypes:true})){
-    if(!entry.isFile()||!/^[-a-z0-9]+\.(html|css|js|mjs|json|png)$/.test(entry.name))throw Error('Unexpected public asset: '+entry.name);
+    if(!entry.isFile()||!/^[-a-z0-9]+\.(html|css|js|mjs|json|png|svg)$/.test(entry.name))throw Error('Unexpected public asset: '+entry.name);
     await copyFile(new URL(entry.name,source),new URL(entry.name,output));count++;
   }
   await writeFile(new URL('site-config.mjs',output),'export const siteConfig=Object.freeze('+JSON.stringify({authOrigin})+');\n');
