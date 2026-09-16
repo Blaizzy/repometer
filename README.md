@@ -46,7 +46,7 @@ Relative links keep search, comparison, assets, and shared selections under `/re
 
 ## GitHub sign-in
 
-GitHub Pages serves the frontend. A separate JavaScript backend handles OAuth and authenticated GitHub API requests. Its endpoint is injected during deployment from the `AUTH_ORIGIN` repository secret.
+GitHub Pages serves the frontend. A separate JavaScript backend deployed on Cloudflare Workers handles OAuth and authenticated GitHub API requests. Its endpoint is injected during deployment from the `AUTH_ORIGIN` repository secret.
 
 The browser is redirected to GitHub and returned to the same Pages selection. GitHub's app secret and user access tokens stay on the server. The backend encrypts stored credentials and gives the browser an opaque, revocable session credential, stored only in the current tab's session. Both OAuth and the handoff to Pages use proof keys and single-use state or tickets. Sessions last up to eight hours. Disconnect invalidates the server session and removes the tab credential.
 
