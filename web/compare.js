@@ -1,5 +1,6 @@
 import {githubAccess} from './github-access.mjs?v=9';
 import {mountGitHubAccess} from './auth-ui.mjs?v=9';
+import {mountRepositoryLink} from './repository-link.mjs';
 import {RefreshLoop} from './live-data.mjs?v=9';
 import {ComparisonCounter,parseSelection,comparisonQuery,summarizeComparison} from './compare-data.mjs?v=9';
 import {targetURL} from './targets.mjs';
@@ -64,5 +65,6 @@ function restore(){stop();snapshots=null;selections=null;fileType='';dirty=false
 window.addEventListener('popstate',restore);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loop?.run();});window.addEventListener('focus',()=>loop?.run());window.addEventListener('online',()=>loop?.run(true));window.addEventListener('pagehide',event=>{if(!event.persisted)stop();});
 await githubAccess.initialize();
 mountGitHubAccess();
+mountRepositoryLink();
 window.addEventListener('github-auth-change',()=>{if(selections&&!dirty)start(selections,{keep:true,writeURL:false});});
 restore();

@@ -1,5 +1,6 @@
 import {githubAccess} from './github-access.mjs?v=9';
 import {mountGitHubAccess} from './auth-ui.mjs?v=9';
+import {mountRepositoryLink} from './repository-link.mjs';
 import {GithubCounter, RefreshLoop} from './live-data.mjs?v=9';
 import {normalizeTarget, parseTarget, targetURL, readTarget, folderTotals} from './targets.mjs';
 const $=id=>document.getElementById(id),set=(id,text)=>{$(id).textContent=text;},num=n=>new Intl.NumberFormat('en-US').format(n),signed=n=>n<0?'−'+num(-n):n>0?'+'+num(n):'0';
@@ -137,6 +138,7 @@ function restore(){const p=new URLSearchParams(location.search);scope=['all','so
 window.addEventListener('popstate',restore);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loop?.run();});window.addEventListener('focus',()=>loop?.run());window.addEventListener('online',()=>loop?.run(true));window.addEventListener('pagehide',event=>{if(!event.persisted)stop();});
 await githubAccess.initialize();
 mountGitHubAccess();
+mountRepositoryLink();
 window.addEventListener('github-auth-change',()=>{if(target)openTarget(target,{replace:true});else if(new URLSearchParams(location.search).get('q'))search($('query').value,{writeURL:false});});
 restore();
 if(document.modelContext?.registerTool){const lifecycle=new AbortController();for(const tool of [{name:'open_github_counts',title:'Open repository or PR counts',description:'Open line counts for a public GitHub repository, optional folder, or pull request using the visible workspace.',inputSchema:{type:'object',properties:{repository:{type:'string'},mode:{type:'string',enum:['repo','pr']},pull:{type:'integer'},directory:{type:'string'},ref:{type:'string'}},required:['repository','mode'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},async execute(input){const normalized=normalizeTarget(input);await openTarget(normalized);if(!snapshot)throw new Error($('error-message').textContent||'Count did not finish.');return render();}},{name:'set_line_count_scope',title:'Filter line counts',description:'Choose all text files, Python and JSON, or Python only in the visible count.',inputSchema:{type:'object',properties:{scope:{type:'string',enum:['all','source','python']}},required:['scope'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute(input){if(!input||!['all','source','python'].includes(input.scope)||Object.keys(input).length!==1)throw new Error('Scope must be all, source, or python.');if(!snapshot)throw new Error('Open a repository or pull request first.');scope=input.scope;document.querySelectorAll('input[name="scope"]').forEach(x=>x.checked=x.value===scope);routeURL(target,true);return render();}}]){try{Promise.resolve(document.modelContext.registerTool(tool,{signal:lifecycle.signal})).catch(()=>{});}catch{}}window.addEventListener('pagehide',()=>lifecycle.abort(),{once:true});}

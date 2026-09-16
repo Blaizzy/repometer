@@ -1,0 +1,20 @@
+.workspace-nav>a{white-space:nowrap}
+.repository-link{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  flex-shrink:0;
+  min-height:40px;
+  padding:8px 11px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--white);
+  color:var(--ink);
+  transition:background .15s,border-color .15s;
+}
+.repository-link:hover{background:#f0f6f3;border-color:#a8c7b7;text-decoration:none}
+.repository-link>svg{width:20px;height:20px;flex-shrink:0;fill:currentColor}
+.repository-stars{display:inline-flex;align-items:center;gap:5px;padding-left:10px;border-left:1px solid var(--line);font-size:13px;font-variant-numeric:tabular-nums}
+.repository-stars svg{width:15px;height:15px;fill:none;stroke:#597b66;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:1280px){.site-header .header-label{display:none}}
+@media(max-width:530px){.workspace-nav{gap:12px 18px}.repository-link{margin-right:auto}.github-access-button{margin-left:0}}
