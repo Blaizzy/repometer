@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <title>Repometer — GitHub line counts</title>
+  <desc>Repometer branding with an illustration of two repositories and comparison bars.</desc>
+  <rect width="1200" height="630" fill="#f6f8f9"/>
+  <path d="M790 0H1200V630H790Z" fill="#e9f3ee"/>
+  <path d="M790 0V630" stroke="#d1e2d9"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <rect x="64" y="58" width="60" height="60" rx="16" fill="#172525"/>
+    <path d="M84 77L74 88L84 99M104 77L114 88L104 99M98 74L90 102" fill="none" stroke="#9deacb" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="140" y="100" font-size="40" font-weight="700" letter-spacing="-1.5" fill="#172525">repo<tspan font-weight="400" fill="#657373">meter</tspan></text>
+    <text x="64" y="242" font-size="20" font-weight="700" letter-spacing="3.2" fill="#47745e">KNOW YOUR CODEBASE</text>
+    <g font-size="78" font-weight="700" letter-spacing="-3" fill="#172525">
+      <text x="60" y="338">GitHub</text>
+      <text x="60" y="425">line counts.</text>
+    </g>
+    <text x="64" y="486" font-size="26" fill="#5e6d73">Repositories. Folders. Pull requests.</text>
+    <text x="64" y="563" font-size="22" font-weight="700" fill="#205a46">Count your code. Compare side by side.</text>
+
+    <rect x="739" y="143" width="392" height="360" rx="22" fill="#172525"/>
+    <path d="M763 215H1107" stroke="#39524a"/>
+    <circle cx="769" cy="178" r="5" fill="#70b697"/>
+    <circle cx="788" cy="178" r="5" fill="#47745e"/>
+    <circle cx="807" cy="178" r="5" fill="#39524a"/>
+    <text x="849" y="185" font-size="18" fill="#d7e8df">Repository comparison</text>
+    <rect x="769" y="244" width="36" height="36" rx="8" fill="#33594a"/>
+    <text x="787" y="269" font-size="22" font-weight="700" text-anchor="middle" fill="#b9e7cf">A</text>
+    <text x="820" y="269" font-size="22" font-weight="700" fill="#f4f8f5">Repository A</text>
+    <rect x="769" y="298" width="332" height="19" rx="5" fill="#2a4138"/>
+    <rect x="769" y="298" width="282" height="19" rx="5" fill="#9deacb"/>
+    <rect x="769" y="355" width="36" height="36" rx="8" fill="#354948"/>
+    <text x="787" y="380" font-size="22" font-weight="700" text-anchor="middle" fill="#c6dfda">B</text>
+    <text x="820" y="380" font-size="22" font-weight="700" fill="#f4f8f5">Repository B</text>
+    <rect x="769" y="409" width="332" height="19" rx="5" fill="#2a4138"/>
+    <rect x="769" y="409" width="193" height="19" rx="5" fill="#60a58b"/>
+    <text x="769" y="471" font-size="17" fill="#a9c3b6">Explore every folder and file type</text>
+  </g>
+</svg>

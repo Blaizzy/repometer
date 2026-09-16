@@ -31,3 +31,27 @@ test('deployment rejects missing or invalid endpoint configuration before replac
  }
  assert.deepEqual(await builtConfig(),{authOrigin:'https://auth.example'});
 });
+
+test('shared links expose a complete preview image in HTML without running JavaScript',async()=>{
+ await build({authOrigin:''});
+ for(const file of ['index.html','compare.html','compare/index.html']){
+  const html=await readFile(new URL('../dist/'+file,import.meta.url),'utf8');
+  const head=html.match(/<head>([\s\S]*?)<\/head>/)[1];
+  const metadata=new Map([...head.matchAll(/<meta (?:property|name)="([^"]+)" content="([^"]*)">/g)].map(match=>[match[1],match[2]]));
+  for(const key of ['og:title','og:description','og:image:alt','twitter:image:alt'])assert.ok(metadata.get(key),file+' is missing '+key);
+  assert.equal(metadata.get('og:type'),'website');
+  assert.equal(metadata.get('twitter:card'),'summary_large_image');
+  assert.equal(metadata.get('twitter:title'),metadata.get('og:title'));
+  assert.equal(metadata.get('twitter:image'),metadata.get('og:image'));
+  const imageURL=new URL(metadata.get('og:image'));
+  assert.equal(imageURL.origin,'https://blaizzy.github.io');
+  assert.equal(imageURL.pathname,'/repometer/social-preview.png');
+  const png=await readFile(new URL('../dist/social-preview.png',import.meta.url));
+  assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+  assert.equal(png.toString('ascii',12,16),'IHDR');
+  assert.equal(metadata.get('og:image:type'),'image/png');
+  assert.equal(png.readUInt32BE(16),Number(metadata.get('og:image:width')));
+  assert.equal(png.readUInt32BE(20),Number(metadata.get('og:image:height')));
+  assert.ok(png.length<1_000_000,'Preview image should stay small enough for sharing apps');
+ }
+});
