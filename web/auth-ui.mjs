@@ -28,7 +28,7 @@ export function mountGitHubAccess(){
     signIn.disabled=!state.oauth.configured;
     signIn.hidden=state.connected&&state.mode==='oauth'&&!state.invalid;
     help.hidden=signIn.hidden;
-    help.textContent='Approve on GitHub and return to this page. Your GitHub credentials stay on the server, and Repometer reads public repositories only.';
+    help.textContent=state.oauth.configured?'Approve on GitHub and return to this page. Your GitHub credentials stay on the server, and Repometer reads public repositories only.':'GitHub sign-in is awaiting one-time setup. You can connect with a personal access token below.';
     status.textContent=state.invalid?'Your GitHub connection expired or was revoked. Sign in again to reconnect.':state.connected?'Connected as '+state.login+(state.mode==='oauth'?' with GitHub sign-in.':' with a personal access token.'):'Currently using GitHub without authentication.';
     if(state.connected&&state.mode==='oauth'&&!state.invalid&&state.expiresAt)status.textContent+=' Sign in again after '+new Date(state.expiresAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'.';
     if(state.rate&&!state.invalid){status.textContent+=' '+state.rate.remaining.toLocaleString()+' / '+state.rate.limit.toLocaleString()+' API requests remaining';if(state.rate.resetAt)status.textContent+=' · resets at '+new Date(state.rate.resetAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});status.textContent+='.';}
