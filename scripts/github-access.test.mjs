@@ -93,7 +93,7 @@ test('Pages sign-in uses proof keys, removes the callback ticket from the URL, a
   assert.equal(requests[0].url,'https://auth.example/api/github?path=%2Frepos%2FBlaizzy%2Fmlx-vlm');assert.equal(requests[0].options.headers.get('Authorization'),'Bearer '+opaque);assert.equal(requests[1].options.headers.Authorization,undefined);
 });
 test('mismatched callback state never sends the ticket to the server',async()=>{
-  let calls=0;const storage=session(),access=new GitHubAccess({storage,fetchImpl:async()=>{calls++;throw Error('must not call');}});await access.beginSignIn('https://blaizzy.github.io/repometer/');await access.initialize({pageURL:'https://blaizzy.github.io/repometer/#oauth_code='+'b'.repeat(43)+'&oauth_state=wrong',replaceURL:()=>{}});assert.equal(calls,0);assert.equal(access.state().connected,false);assert.match(access.state().authError,/did not match/);assert.equal(storage.getItem('repometer.github.pending.v2'),null);
+  let calls=0;const storage=session(),access=new GitHubAccess({storage,authOrigin:'https://auth.example',fetchImpl:async()=>{calls++;throw Error('must not call');}});await access.beginSignIn('https://blaizzy.github.io/repometer/');await access.initialize({pageURL:'https://blaizzy.github.io/repometer/#oauth_code='+'b'.repeat(43)+'&oauth_state=wrong',replaceURL:()=>{}});assert.equal(calls,0);assert.equal(access.state().connected,false);assert.match(access.state().authError,/did not match/);assert.equal(storage.getItem('repometer.github.pending.v2'),null);
 });
 test('OAuth session restoration and disconnect use the backend without browser cookies',async()=>{
  const storage=session(),opaque='c'.repeat(43),calls=[];storage.setItem('repometer.github.session.v2',JSON.stringify({mode:'oauth',sessionToken:opaque,login:'Blaizzy',expiresAt:200000}));
@@ -101,7 +101,21 @@ test('OAuth session restoration and disconnect use the backend without browser c
  await access.initialize();assert.equal(access.state().connected,true);assert.equal(calls[0].options.headers.Authorization,'Bearer '+opaque);assert.equal(calls[0].options.credentials,'omit');await access.disconnect();assert.equal(calls.at(-1).url,'https://auth.example/api/github/logout');assert.equal(calls.at(-1).options.headers.Authorization,'Bearer '+opaque);assert.equal(access.state().connected,false);assert.equal(storage.getItem('repometer.github.session.v2'),null);
 });
 test('GitHub sign-in requires tab storage, while a personal token still works without it',async()=>{
- const access=new GitHubAccess({storage:null,fetchImpl:async()=>account()});await assert.rejects(access.beginSignIn('https://blaizzy.github.io/repometer/'),/Allow tab storage/);await access.connect(token);assert.equal(access.state().connected,true);
+ const access=new GitHubAccess({storage:null,authOrigin:'https://auth.example',fetchImpl:async()=>account()});await assert.rejects(access.beginSignIn('https://blaizzy.github.io/repometer/'),/Allow tab storage/);await access.connect(token);assert.equal(access.state().connected,true);
+});
+
+test('an unconfigured preview skips OAuth requests and saved sessions while public and personal-token access still work',async()=>{
+ const storage=session(),calls=[];
+ storage.setItem('repometer.github.session.v2',JSON.stringify({mode:'oauth',sessionToken:'c'.repeat(43),login:'Blaizzy'}));
+ const access=new GitHubAccess({storage,authOrigin:'',fetchImpl:async(url,options)=>{calls.push({url,options});return account();}});
+ const state=await access.initialize();
+ assert.deepEqual(state.oauth,{available:false,configured:false});assert.equal(state.connected,false);assert.equal(state.authError,'');assert.equal(calls.length,0);
+ await assert.rejects(access.beginSignIn('https://example.test/'),/not configured/);
+ assert.equal(storage.getItem('repometer.github.pending.v2'),null);
+ await access.transport('https://api.github.com/repos/acme/repo',{});
+ assert.equal(calls[0].url,'https://api.github.com/repos/acme/repo');assert.equal(calls[0].options.headers,undefined);
+ await access.connect(token);assert.equal(access.state().connected,true);assert.equal(access.state().mode,'pat');
+ assert.equal(calls[1].url,'https://api.github.com/user');assert.equal(calls[1].options.headers.Authorization,'Bearer '+token);
 });
 
 test('moving the backend starts a clean session without forwarding legacy credentials',async()=>{

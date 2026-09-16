@@ -24,8 +24,14 @@ jobs:
           node-version: '24'
       - name: Test
         run: npm test
-      - name: Build
+      - name: Build preview
+        if: github.event_name == 'pull_request'
         run: npm run build
+      - name: Build for deployment
+        if: github.event_name != 'pull_request'
+        env:
+          AUTH_ORIGIN: ${{ secrets.AUTH_ORIGIN }}
+        run: npm run build -- --require-auth-origin
       - name: Configure Pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5

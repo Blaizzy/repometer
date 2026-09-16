@@ -1,7 +1,7 @@
-import {githubAccess} from './github-access.mjs?v=11';
-import {mountGitHubAccess} from './auth-ui.mjs?v=11';
-import {mountRepositoryLink} from './repository-link.mjs?v=11';
-import {GithubCounter, RefreshLoop} from './live-data.mjs?v=11';
+import {githubAccess} from './github-access.mjs?v=12';
+import {mountGitHubAccess} from './auth-ui.mjs?v=12';
+import {mountRepositoryLink} from './repository-link.mjs?v=12';
+import {GithubCounter, RefreshLoop} from './live-data.mjs?v=12';
 import {normalizeTarget, parseTarget, targetURL, readTarget, folderTotals} from './targets.mjs';
 const $=id=>document.getElementById(id),set=(id,text)=>{$(id).textContent=text;},num=n=>new Intl.NumberFormat('en-US').format(n),signed=n=>n<0?'−'+num(-n):n>0?'+'+num(n):'0';
 const caches=new Map();

@@ -8,7 +8,6 @@
   "preview_urls": false,
   "observability": { "enabled": false },
   "vars": {
-    "SITE_ORIGIN": "https://repometer-auth.prince-gdt.workers.dev",
     "FRONTEND_URL": "https://blaizzy.github.io/repometer/"
   },
   "d1_databases": [

@@ -1,4 +1,4 @@
-import {siteConfig} from './site-config.mjs?v=2';
+import {siteConfig} from './site-config.mjs?v=3';
 const CONNECTION_KEY='repometer.github.pat.v1',COOLDOWN_KEY='repometer.github.cooldowns.v1',OAUTH_KEY='repometer.github.session.v2',PENDING_KEY='repometer.github.pending.v2';
 const validSession=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{43}$/.test(value);
 const base64=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
@@ -15,14 +15,15 @@ export class GitHubAccess {
     this.storage=storage;this.authOrigin=authOrigin;this.fetch=fetchImpl;this.now=now;this.listeners=new Set();this.rate=null;
     const saved=read(storage,CONNECTION_KEY);
     const oauth=read(storage,OAUTH_KEY);
-    this.connection=validToken(saved?.token)&&typeof saved.login==='string'?saved:validSession(oauth?.sessionToken)&&typeof oauth.login==='string'?oauth:null;
+    this.connection=validToken(saved?.token)&&typeof saved.login==='string'?saved:authOrigin&&validSession(oauth?.sessionToken)&&typeof oauth.login==='string'?oauth:null;
     this.cooldowns=read(storage,COOLDOWN_KEY)||{};
-    this.persisted=!!this.connection;this.oauth={available:true,configured:true};this.authError='';
+    this.persisted=!!this.connection;this.oauth={available:!!authOrigin,configured:!!authOrigin};this.authError='';
   }
   state(){return {connected:!!this.connection,login:this.connection?.login||'',invalid:!!this.connection?.invalid,rate:this.rate,persisted:this.persisted,mode:this.connection?.mode||(this.connection?'pat':null),expiresAt:this.connection?.expiresAt||0,oauth:{...this.oauth},authError:this.authError};}
   backendURL(path){return new URL(path,this.authOrigin).href;}
   sessionHeaders(){return this.connection?.mode==='oauth'&&validSession(this.connection.sessionToken)?{Authorization:'Bearer '+this.connection.sessionToken}:{};}
   async beginSignIn(pageURL){
+    if(!this.authOrigin)throw new Error('GitHub sign-in is not configured for this site. You can use a personal access token.');
     const verifier=random(),state=random();
     if(!this.save(PENDING_KEY,{verifier,state,createdAt:this.now()}))throw new Error('Allow tab storage to sign in with GitHub. You can also use a personal access token.');
     const returnTo=new URL(pageURL);returnTo.hash='';
@@ -30,6 +31,7 @@ export class GitHubAccess {
   }
   async initialize({pageURL=globalThis.location?.href,replaceURL=url=>globalThis.history?.replaceState(globalThis.history.state,'',url)}={}){
     this.authError='';
+    if(!this.authOrigin)return this.state();
     try{
       const page=pageURL?new URL(pageURL):null,params=new URLSearchParams(page?.hash.slice(1));
       if(params.has('oauth_code')){

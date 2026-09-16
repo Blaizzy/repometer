@@ -1,4 +1,4 @@
-import {githubAccess} from './github-access.mjs?v=11';
+import {githubAccess} from './github-access.mjs?v=12';
 import {normalizeTarget, extension} from './targets.mjs';
 const SHA=/^[a-f0-9]{40}$/;
 const BINARY=/\.(?:png|jpe?g|gif|webp|ico|avif|heic|pdf|zip|gz|bz2|xz|7z|tar|woff2?|ttf|otf|eot|mp[34]|mov|wav|ogg|flac|npy|npz|safetensors|gguf|pt|pth|onnx|bin|exe|dll|so|dylib|pyc|class|jar|wasm)$/i;
