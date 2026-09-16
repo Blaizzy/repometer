@@ -1,4 +1,4 @@
-import {GithubCounter, GithubError} from './live-data.mjs?v=12';
+import {GithubCounter, GithubError} from './live-data.mjs?v=13';
 import {parseTarget, normalizeTarget} from './targets.mjs';
 
 export function parseSelection(value, ref='', directory='') {

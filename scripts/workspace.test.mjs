@@ -36,6 +36,27 @@ test('whole-repository totals include nested and empty text files and report exc
  assert.ok(result.files.some(x=>x.path==='empty.txt'&&x.after===0));assert.ok(f.calls.every(url=>url.includes('acme/one')));
  const before=f.calls.length;await f.counter.refresh(result);assert.equal(f.calls.length,before+1,'unchanged repository only checks the branch commit');
 });
+test('repository progress reports real completed files and partial lines, including exclusions and cached refreshes',async()=>{
+ const f=fixture(),events=[];f.counter.onProgress=(message,detail)=>events.push({message,...detail});
+ const result=await f.counter.refresh(),counting=events.filter(event=>event.phase==='counting');
+ assert.deepEqual(events.slice(0,2).map(event=>event.phase),['checking','listing']);
+ assert.equal(counting[0].completed,0);assert.equal(counting[0].lines,0);
+ assert.equal(counting.at(-1).completed,10);assert.equal(counting.at(-1).total,10);
+ for(let i=1;i<counting.length;i++){
+  assert.equal(counting[i].completed,counting[i-1].completed+1);
+  assert.equal(counting[i].completed,counting[i].textFiles+counting[i].excluded);
+  assert.ok(counting[i].lines>=counting[i-1].lines);assert.ok(counting[i].path);
+ }
+ assert.equal(counting.at(-1).lines,result.after);assert.equal(counting.at(-1).textFiles,result.files.length);assert.equal(counting.at(-1).excluded,result.excluded);
+ events.length=0;await f.counter.refresh(result);
+ const cached=events.at(-1);assert.equal(cached.completed,cached.total);assert.equal(cached.lines,result.after);assert.equal(cached.cached,result.files.length);
+});
+test('cancelling a count stops progress and does not publish a partial revision',async()=>{
+ const f=fixture(),events=[];
+ f.counter.onProgress=(_message,detail)=>{events.push(detail);if(detail.phase==='counting'&&detail.completed===2)f.counter.abort();};
+ await assert.rejects(f.counter.refresh(),{name:'AbortError'});
+ assert.equal(events.at(-1).completed,2);assert.equal(f.counter.revisions.size,0);
+});
 test('folder totals include descendants without including similarly prefixed siblings',async()=>{
  const {counter}=fixture({directory:'src'}),result=await counter.refresh();assert.equal(result.after,5);assert.equal(result.files.length,2);assert.equal(result.excluded,2);
  assert.deepEqual(folderTotals(result.files,'src'),[{name:'nested',path:'src/nested',before:0,after:2,files:1}]);

@@ -1,10 +1,12 @@
-import {githubAccess} from './github-access.mjs?v=12';
-import {mountGitHubAccess} from './auth-ui.mjs?v=12';
-import {mountRepositoryLink} from './repository-link.mjs?v=12';
-import {GithubCounter, RefreshLoop} from './live-data.mjs?v=12';
+import {githubAccess} from './github-access.mjs?v=13';
+import {mountGitHubAccess} from './auth-ui.mjs?v=13';
+import {mountRepositoryLink} from './repository-link.mjs?v=13';
+import {GithubCounter, RefreshLoop} from './live-data.mjs?v=13';
+import {CountProgress} from './count-progress.mjs?v=1';
 import {normalizeTarget, parseTarget, targetURL, readTarget, folderTotals} from './targets.mjs';
 const $=id=>document.getElementById(id),set=(id,text)=>{$(id).textContent=text;},num=n=>new Intl.NumberFormat('en-US').format(n),signed=n=>n<0?'−'+num(-n):n>0?'+'+num(n):'0';
-const caches=new Map();
+const caches=new Map(),progress=new CountProgress($('count-progress'));
+const accessReady=githubAccess.initialize();
 let target=null,snapshot=null,counter=null,loop=null,searchCounter=null,generation=0,scope='all',fileType='',sort='after',fileQuery='';
 const typeNames={'.py':'Python','.json':'JSON','.md':'Markdown','.js':'JavaScript','.mjs':'JavaScript modules','.cjs':'CommonJS','.ts':'TypeScript','.tsx':'TSX','.jsx':'JSX','.rs':'Rust','.go':'Go','.c':'C','.cpp':'C++','.h':'C headers','.html':'HTML','.css':'CSS','.scss':'SCSS','.yaml':'YAML','.yml':'YAML','.toml':'TOML','.sh':'Shell','.txt':'Text','.swift':'Swift','.java':'Java','.rb':'Ruby','.ipynb':'Notebooks','.svg':'SVG'};
 const typeName=ext=>typeNames[ext]||ext||'No extension';
@@ -15,8 +17,8 @@ function external(el,url){el.href=url;el.target='_blank';el.rel='noopener norefe
 function notice(error){return error instanceof TypeError&&/fetch|network|load failed/i.test(error.message)?'Could not reach GitHub. Check your connection and try again.':error.message;}
 function include(file){return(scope==='all'||file.extension==='.py'||(scope==='source'&&file.extension==='.json'))&&(!fileType||file.extension===(fileType==='__none'?'':fileType))&&file.path.toLowerCase().includes(fileQuery.toLowerCase());}
 function sum(files){return files.reduce((n,f)=>({before:n.before+f.before,after:n.after+f.after}),{before:0,after:0});}
-function setBusy(busy){$('comparison').setAttribute('aria-busy',String(busy));$('refresh').disabled=busy;$('retry').disabled=busy;$('cancel').hidden=!busy;}
-function stop(){generation++;loop?.stop();counter?.abort();searchCounter?.abort();loop=null;}
+function setBusy(busy){$('comparison').setAttribute('aria-busy',String(busy));$('count-results').setAttribute('aria-busy',String(busy));$('refresh').disabled=busy;$('retry').disabled=busy;$('cancel').hidden=!busy;$('count-form').querySelector('button[type=submit]').disabled=busy;for(const id of ['file-type','file-search','sort'])$(id).disabled=busy&&!snapshot;}
+function stop(){generation++;loop?.stop();counter?.abort();searchCounter?.abort();loop=null;progress.finish();setBusy(false);}
 function updateMode(){const pr=$('mode').value==='pr';$('ref-field').hidden=pr;$('pr-field').hidden=!pr;$('pr-number').required=pr;}
 function routeURL(t,replace=false){history[replace?'replaceState':'pushState']({},'',targetURL(t,scope));}
 function breadcrumbs(){
@@ -24,7 +26,7 @@ function breadcrumbs(){
   let directory='';for(const part of target.directory.split('/').filter(Boolean)){directory+=(directory?'/':'')+part;node.append(element('span','','/'),link(part,targetURL({...target,directory},scope)));}
 }
 function prepare(){
-  $('home').hidden=true;$('workspace').hidden=false;$('load-error').hidden=true;
+  $('home').hidden=true;$('workspace').hidden=false;$('load-error').hidden=true;$('count-results').hidden=true;
   $('compare-nav').href='./compare.html?'+new URLSearchParams({left:target.repository,leftRef:target.mode==='repo'?target.ref:'',leftPath:target.directory,scope});
   $('mode').value=target.mode;$('ref').value=target.ref;$('folder').value=target.directory;$('pr-number').value=target.pull||'';updateMode();breadcrumbs();
   const pr=target.mode==='pr';$('workspace').classList.toggle('is-repo',!pr);
@@ -49,7 +51,7 @@ function setTypes(){
   if(fileType&&!choices.includes(fileType==='__none'?'':fileType))fileType='';$('file-type').value=fileType;
 }
 function applySnapshot(next){
-  snapshot=next;const pr=snapshot.mode==='pr';
+  snapshot=next;$('count-results').hidden=false;const pr=snapshot.mode==='pr';
   set('description',pr?snapshot.title:(snapshot.ref+' · '+(target.directory||'Entire repository')));
   $('ref').placeholder=snapshot.ref||'Default branch';set('head-sha',snapshot.head.slice(0,7));external($('head-link'),'https://github.com/'+snapshot.repository+'/commit/'+snapshot.head);
   set('snapshot-date',new Date(snapshot.capturedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}));
@@ -100,13 +102,19 @@ function render(){
 async function openTarget(input,{replace=false,writeURL=true}={}){
   let next;try{next=normalizeTarget(input);}catch(error){showFormError(error);return;}
   stop();target=next;snapshot=null;fileType='';fileQuery='';sort=target.mode==='pr'?'change':'after';const id=generation;
-  if(writeURL)routeURL(target,replace);prepare();
-  counter=new GithubCounter({...target,cache:cacheFor(target.repository),onProgress:message=>{if(id===generation)set('sync-status',message+(snapshot?' · Showing previous counts until complete':''));}});const active=counter;
+  if(writeURL)routeURL(target,replace);prepare();setBusy(true);progress.begin();set('sync-status','Connecting to GitHub…');
+  await accessReady;if(id!==generation)return;
+  let progressStage='';
+  counter=new GithubCounter({...target,cache:cacheFor(target.repository),onProgress:(message,detail)=>{
+    if(id!==generation)return;progress.update(detail);
+    const stage=detail.phase+':'+(detail.label||'');
+    if(stage!==progressStage){progressStage=stage;set('sync-status',message.split(' · ')[0]+(snapshot?' · Showing last complete results':''));}
+  }});const active=counter;
   if(target.repository.toLowerCase()==='blaizzy/mlx-vlm'&&target.mode==='pr'&&target.pull===2276&&target.directory==='mlx_vlm/tests'){
     try{const response=await fetch('./data.json');if(response.ok){const saved=await response.json();if(id!==generation)return;active.seed(saved);applySnapshot({...saved,mode:'pr',repository:target.repository,directory:target.directory});}}catch{}
   }
   if(id!==generation)return;
-  loop=new RefreshLoop({refresh:()=>active.refresh(snapshot),visible:()=>document.visibilityState==='visible',onStart(){if(id!==generation)return;setBusy(true);$('load-error').hidden=true;set('sync-status','Checking GitHub…');},onSuccess(next){if(id!==generation)return;applySnapshot(next);setBusy(false);set('sync-status','Up to date · Last checked '+new Date(next.checkedAt).toLocaleTimeString('en-GB')+' · Checks every '+(githubAccess.state().connected?'2':'5')+' min');},onError(error,retryAt){if(id!==generation)return;setBusy(false);if(error.name==='AbortError'){set('sync-status','Count cancelled. Change the folder or refresh to resume.');return;}$('load-error').hidden=false;set('sync-status',snapshot?'Update failed · Previous counts remain visible':'Counts unavailable');const permanent=[400,401,404,409].includes(error.status);if(permanent)loop.stop();if(error.retryAt>Date.now()){$('retry').disabled=true;$('refresh').disabled=true;setTimeout(()=>{if(id===generation){$('retry').disabled=false;$('refresh').disabled=false;loop?.run();}},error.retryAt-Date.now()+100);}
+  loop=new RefreshLoop({refresh:()=>active.refresh(snapshot),visible:()=>document.visibilityState==='visible',onStart(){if(id!==generation)return;setBusy(true);progress.begin({hasSnapshot:!!snapshot});progressStage='';$('load-error').hidden=true;set('sync-status','Checking GitHub…');},onSuccess(next){if(id!==generation)return;applySnapshot(next);setBusy(false);progress.finish();set('sync-status','Up to date · Last checked '+new Date(next.checkedAt).toLocaleTimeString('en-GB')+' · Checks every '+(githubAccess.state().connected?'2':'5')+' min');},onError(error,retryAt){if(id!==generation)return;setBusy(false);progress.stop(error.name==='AbortError'?'cancelled':'error');if(error.name==='AbortError'){set('sync-status','Count cancelled. Change the folder or refresh to resume.');return;}$('load-error').hidden=false;set('sync-status',snapshot?'Update failed · Previous counts remain visible':'Counts unavailable');const permanent=[400,401,404,409].includes(error.status);if(permanent)loop.stop();if(error.retryAt>Date.now()){$('retry').disabled=true;$('refresh').disabled=true;setTimeout(()=>{if(id===generation){$('retry').disabled=false;$('refresh').disabled=false;loop?.run();}},error.retryAt-Date.now()+100);}
 set('error-message',notice(error)+(permanent?'':' Retrying at '+new Date(retryAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'.'));if(!snapshot){const tr=element('tr'),td=element('td','load-message','No counts loaded. Check the repository, branch, or folder and try again.');td.colSpan=5;tr.append(td);$('file-rows').replaceChildren(tr);}}});
   await loop.run(true);
 }
@@ -118,6 +126,7 @@ async function search(value,{writeURL=true}={}){
   $('query').value=value;$('search-feedback').hidden=false;set('search-feedback','Searching GitHub…');$('search-results').hidden=true;$('search-button').disabled=true;
   searchCounter=new GithubCounter({mode:'repo',directory:''});
   try{
+    await accessReady;if(id!==generation)return;
     let direct=parseTarget(value);
     if(direct){if(direct.treeTail){searchCounter=new GithubCounter({...direct,directory:''});const resolved=await searchCounter.resolveTreeTail(direct.treeTail);direct={...direct,...resolved};}if(id!==generation)return;scope='all';await openTarget(direct,{replace:true});return;}
     const results=await searchCounter.searchRepositories(value);if(id!==generation)return;
@@ -130,15 +139,15 @@ $('mode').addEventListener('change',updateMode);
 $('count-form').addEventListener('submit',event=>{event.preventDefault();openTarget({repository:target.repository,mode:$('mode').value,pull:$('pr-number').value,ref:$('ref').value,directory:$('folder').value});});
 $('refresh').addEventListener('click',()=>{if(!loop||loop.stopped||counter.cancelled)openTarget(target,{replace:true});else loop.run(true);});
 $('retry').addEventListener('click',()=>{if(!loop||loop.stopped||counter.cancelled)openTarget(target,{replace:true});else loop.run(true);});
-$('cancel').addEventListener('click',()=>{loop?.stop();counter?.abort();setBusy(false);set('sync-status','Count cancelled. Change the folder or refresh to resume.');});
+$('cancel').addEventListener('click',()=>{generation++;loop?.stop();counter?.abort();progress.stop('cancelled');setBusy(false);set('sync-status','Count cancelled. Change the folder or refresh to resume.');});
 document.querySelectorAll('input[name="scope"]').forEach(input=>input.addEventListener('change',()=>{scope=input.value;render();if(target)routeURL(target,true);}));
 $('file-type').addEventListener('change',()=>{fileType=$('file-type').value;render();});$('sort').addEventListener('change',()=>{sort=$('sort').value;render();});$('file-search').addEventListener('input',()=>{fileQuery=$('file-search').value;render();});
 document.addEventListener('click',event=>{const a=event.target.closest('a');if(!a||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;const href=a.getAttribute('href');if(href==='./'){event.preventDefault();home();}else if(href?.startsWith('?repo=')){event.preventDefault();const p=new URLSearchParams(href);scope=p.get('scope')||'all';try{openTarget(readTarget(href));}catch(error){showFormError(error);}}});
 function restore(){const p=new URLSearchParams(location.search);scope=['all','source','python'].includes(p.get('scope'))?p.get('scope'):'all';try{const t=readTarget(location.search);if(t)openTarget(t,{writeURL:false});else if(p.get('q'))search(p.get('q'),{writeURL:false});else home({writeURL:false});}catch(error){home({writeURL:false});$('search-feedback').hidden=false;set('search-feedback',notice(error));}}
 window.addEventListener('popstate',restore);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loop?.run();});window.addEventListener('focus',()=>loop?.run());window.addEventListener('online',()=>loop?.run(true));window.addEventListener('pagehide',event=>{if(!event.persisted)stop();});
-await githubAccess.initialize();
+restore();
+await accessReady;
 mountGitHubAccess();
 mountRepositoryLink();
 window.addEventListener('github-auth-change',()=>{if(target)openTarget(target,{replace:true});else if(new URLSearchParams(location.search).get('q'))search($('query').value,{writeURL:false});});
-restore();
 if(document.modelContext?.registerTool){const lifecycle=new AbortController();for(const tool of [{name:'open_github_counts',title:'Open repository or PR counts',description:'Open line counts for a public GitHub repository, optional folder, or pull request using the visible workspace.',inputSchema:{type:'object',properties:{repository:{type:'string'},mode:{type:'string',enum:['repo','pr']},pull:{type:'integer'},directory:{type:'string'},ref:{type:'string'}},required:['repository','mode'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},async execute(input){const normalized=normalizeTarget(input);await openTarget(normalized);if(!snapshot)throw new Error($('error-message').textContent||'Count did not finish.');return render();}},{name:'set_line_count_scope',title:'Filter line counts',description:'Choose all text files, Python and JSON, or Python only in the visible count.',inputSchema:{type:'object',properties:{scope:{type:'string',enum:['all','source','python']}},required:['scope'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute(input){if(!input||!['all','source','python'].includes(input.scope)||Object.keys(input).length!==1)throw new Error('Scope must be all, source, or python.');if(!snapshot)throw new Error('Open a repository or pull request first.');scope=input.scope;document.querySelectorAll('input[name="scope"]').forEach(x=>x.checked=x.value===scope);routeURL(target,true);return render();}}]){try{Promise.resolve(document.modelContext.registerTool(tool,{signal:lifecycle.signal})).catch(()=>{});}catch{}}window.addEventListener('pagehide',()=>lifecycle.abort(),{once:true});}

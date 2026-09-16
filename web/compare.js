@@ -1,8 +1,8 @@
-import {githubAccess} from './github-access.mjs?v=12';
-import {mountGitHubAccess} from './auth-ui.mjs?v=12';
-import {mountRepositoryLink} from './repository-link.mjs?v=12';
-import {RefreshLoop} from './live-data.mjs?v=12';
-import {ComparisonCounter,parseSelection,comparisonQuery,summarizeComparison} from './compare-data.mjs?v=12';
+import {githubAccess} from './github-access.mjs?v=13';
+import {mountGitHubAccess} from './auth-ui.mjs?v=13';
+import {mountRepositoryLink} from './repository-link.mjs?v=13';
+import {RefreshLoop} from './live-data.mjs?v=13';
+import {ComparisonCounter,parseSelection,comparisonQuery,summarizeComparison} from './compare-data.mjs?v=13';
 import {targetURL} from './targets.mjs';
 
 const $=id=>document.getElementById(id),set=(id,value)=>{$(id).textContent=value;};

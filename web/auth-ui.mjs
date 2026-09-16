@@ -1,4 +1,4 @@
-import {githubAccess} from './github-access.mjs?v=12';
+import {githubAccess} from './github-access.mjs?v=13';
 
 export function mountGitHubAccess(){
   if(document.getElementById('github-access-dialog'))return;

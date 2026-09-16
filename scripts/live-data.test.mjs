@@ -88,6 +88,15 @@ test('an unchanged head/base checks PR metadata without downloading or recountin
   assert.ok(f.calls[0].endsWith('/pulls/2276'));
 });
 
+test('PR progress identifies each revision so separate file totals are not confused',async()=>{
+ const f=fixture(),events=[];f.counter.onProgress=(_message,detail)=>events.push(detail);
+ const result=await f.counter.refresh();
+ for(const [label,expected] of [['base',result.before],['head',result.after]]){
+  const revision=events.filter(event=>event.phase==='counting'&&event.label===label);
+  assert.equal(revision[0].completed,0);assert.equal(revision.at(-1).completed,revision.at(-1).total);assert.equal(revision.at(-1).lines,expected);
+ }
+});
+
 test('failed downloads do not mutate prior counts and retries produce a complete revision', async () => {
   const f=fixture(); const previous=await f.counter.refresh(); const saved=JSON.stringify(previous);
   f.setHead('c'); f.setFail(true);

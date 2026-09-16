@@ -1,4 +1,4 @@
-import {githubAccess} from './github-access.mjs?v=12';
+import {githubAccess} from './github-access.mjs?v=13';
 import {normalizeTarget, extension} from './targets.mjs';
 const SHA=/^[a-f0-9]{40}$/;
 const BINARY=/\.(?:png|jpe?g|gif|webp|ico|avif|heic|pdf|zip|gz|bz2|xz|7z|tar|woff2?|ttf|otf|eot|mp[34]|mov|wav|ogg|flac|npy|npz|safetensors|gguf|pt|pth|onnx|bin|exe|dll|so|dylib|pyc|class|jar|wasm)$/i;
@@ -36,6 +36,12 @@ export class GithubCounter {
   key(revision){return this.repository+'@'+revision+':'+this.directory;}
   abort(){this.cancelled=true;for(const c of this.controllers)c.abort();}
   check(){if(this.cancelled)throw new DOMException('Count cancelled.','AbortError');}
+  progress(phase,details={}){
+    this.check();
+    const label=details.label==='base'?'base revision':details.label==='head'?'PR head':'files';
+    const message=phase==='counting'?`Counting ${label} · ${details.completed}/${details.total}`:phase==='listing'?'Finding files…':'Checking GitHub…';
+    this.onProgress(message,{phase,repository:this.repository,directory:this.directory,...details});
+  }
   seed(snapshot){
     if((snapshot.repository??'Blaizzy/mlx-vlm').toLowerCase()!==this.repository.toLowerCase()||(snapshot.directory??'mlx_vlm/tests')!==this.directory)return;
     for(const side of ['before','after']){
@@ -116,22 +122,30 @@ export class GithubCounter {
     };
     await walk(treeSha,prefix);return {found:true,entries};
   }
-  async countRevision(revision){
+  async countRevision(revision,label='repository'){
     this.check();if(!SHA.test(revision))throw new GithubError('GitHub returned an invalid revision.');
-    const key=this.key(revision);if(this.revisions.has(key))return this.revisions.get(key);
+    const key=this.key(revision);
+    if(this.revisions.has(key)){
+      const files=this.revisions.get(key),excluded=this.stats.get(key)?.excluded||0,total=files.length+excluded;
+      this.progress('counting',{label,revision,completed:total,total,excluded,textFiles:files.length,lines:files.reduce((n,file)=>n+file.lines,0),cached:files.length});
+      return files;
+    }
+    this.progress('listing',{label,revision});
     const {entries:tree,found}=await this.tree(revision),result=new Array(tree.length);
-    let cursor=0,completed=0,excluded=0,failed=false;
+    let cursor=0,completed=0,excluded=0,textFiles=0,linesSoFar=0,cached=0,failed=false;
+    this.progress('counting',{label,revision,completed,total:tree.length,excluded,textFiles,lines:linesSoFar,cached});
     const worker=async()=>{
       try{while(cursor<tree.length&&!failed){this.check();const index=cursor++,file=tree[index];
         if(file.type!=='blob'||file.mode==='120000'||BINARY.test(file.path)){excluded++;}
         else{
           if(!this.blobs.has(file.sha)){
             const path=file.path.split('/').map(encodeURIComponent).join('/');
-            const lines=await this.request(`https://raw.githubusercontent.com/${this.repository}/${revision}/${path}`,'lines');this.blobs.set(file.sha,lines);
-          }
-          const lines=this.blobs.get(file.sha);if(lines===null)excluded++;else result[index]={path:file.path,sha:file.sha,lines};
+            const lines=await this.request(`https://raw.githubusercontent.com/${this.repository}/${revision}/${path}`,'lines');
+            if(failed)return;this.check();this.blobs.set(file.sha,lines);
+          }else cached++;
+          const lines=this.blobs.get(file.sha);if(lines===null)excluded++;else{result[index]={path:file.path,sha:file.sha,lines};textFiles++;linesSoFar+=lines;}
         }
-        this.onProgress(`Counting files · ${++completed}/${tree.length}`);
+        this.progress('counting',{label,revision,completed:++completed,total:tree.length,excluded,textFiles,lines:linesSoFar,cached,path:file.path});
       }}catch(error){failed=true;throw error;}
     };
     const workers=await Promise.allSettled(Array.from({length:Math.min(6,tree.length)},worker));
@@ -140,7 +154,7 @@ export class GithubCounter {
   }
   async refresh(previous){return this.mode==='repo'?this.refreshRepository(previous):this.refreshPR(previous);}
   async refreshRepository(previous){
-    this.onProgress('Checking GitHub…');const info=await this.metadata(),ref=this.ref||info.default_branch;
+    this.progress('checking');const info=await this.metadata(),ref=this.ref||info.default_branch;
     const commit=await this.api('/commits/'+encodeURIComponent(ref),true),head=commit.sha;
     if(!SHA.test(head||''))throw new GithubError('GitHub returned an invalid commit.');
     const entries=await this.countRevision(head),stats=this.stats.get(this.key(head));
@@ -149,7 +163,7 @@ export class GithubCounter {
     return {mode:'repo',repository:this.repository,directory:this.directory,ref,head,files,title:info.description||'',url:info.html_url||'https://github.com/'+this.repository,after:files.reduce((n,f)=>n+f.after,0),before:0,excluded:stats.excluded,capturedAt:new Date(this.now()).toISOString(),checkedAt:new Date(this.now()).toISOString()};
   }
   async refreshPR(previous){
-    this.onProgress('Checking GitHub…');const pr=await this.api('/pulls/'+this.pull,true),head=pr.head?.sha,baseTip=pr.base?.sha;
+    this.progress('checking');const pr=await this.api('/pulls/'+this.pull,true),head=pr.head?.sha,baseTip=pr.base?.sha;
     if(pr.base?.repo?.private||pr.head?.repo?.private)throw new GithubError('Only public repositories are supported by this counter.',0,400);
     if(!SHA.test(head||'')||!SHA.test(baseTip||''))throw new GithubError('GitHub returned incomplete pull request data.');
     let base,files,excluded=0;
@@ -157,7 +171,7 @@ export class GithubCounter {
     else{
       const comparison=await this.api(`/compare/${baseTip}...${head}?per_page=1`);base=comparison.merge_base_commit?.sha;
       if(!SHA.test(base||''))throw new GithubError('Could not determine the PR comparison base.');
-      const before=new Map((await this.countRevision(base)).map(f=>[f.path,f])),after=new Map((await this.countRevision(head)).map(f=>[f.path,f]));
+      const before=new Map((await this.countRevision(base,'base')).map(f=>[f.path,f])),after=new Map((await this.countRevision(head,'head')).map(f=>[f.path,f]));
       const bStats=this.stats.get(this.key(base)),aStats=this.stats.get(this.key(head));
       if(!bStats?.found&&!aStats?.found)throw new GithubError('Folder not found in either PR revision.',0,404);
       excluded=(bStats?.excluded||0)+(aStats?.excluded||0);
