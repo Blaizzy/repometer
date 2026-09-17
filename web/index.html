@@ -19,9 +19,9 @@
 <meta name="twitter:image" content="https://blaizzy.github.io/repometer/social-preview.png">
 <meta name="twitter:image:alt" content="Repometer — GitHub line counts for repositories, folders, and pull requests, with a repository comparison illustration.">
 <link rel="icon" type="image/svg+xml" href="./logo.svg">
-<link rel="stylesheet" href="./style.css?v=7">
+<link rel="stylesheet" href="./style.css?v=8">
 <link rel="stylesheet" href="./count-progress.css?v=1">
-<script src="./app.js?v=13" type="module"></script>
+<script src="./app.js?v=14" type="module"></script>
 <link rel="stylesheet" href="./auth.css?v=13">
 <link rel="stylesheet" href="./repository-link.css">
 </head>
@@ -66,7 +66,7 @@
   <button type="submit" class="primary-button">Count lines</button>
  </form>
  <nav id="folder-crumbs" class="folder-crumbs" aria-label="Folder path"></nav>
- <div class="scope-row"><fieldset id="scope-controls"><legend class="visually-hidden">Files to include</legend><label><input type="radio" name="scope" value="all" checked><span>All text files</span></label><label><input type="radio" name="scope" value="source"><span>Python + JSON</span></label><label><input type="radio" name="scope" value="python"><span>Python only</span></label></fieldset><label class="type-control">File type<select id="file-type"><option value="">All types</option></select></label></div>
+ <div class="scope-row"><fieldset id="scope-controls"><legend class="visually-hidden">Files to include</legend><label><input type="radio" name="scope" value="all" checked><span>All text files</span></label><label><input type="radio" name="scope" value="source"><span>Python + JSON</span></label><label><input type="radio" name="scope" value="python"><span>Python only</span></label></fieldset><label id="removed-paths-filter" class="path-filter" hidden><input id="hide-removed" type="checkbox"><span>Hide removed paths</span></label><label class="type-control">File type<select id="file-type"><option value="">All types</option></select></label></div>
  <div id="count-results" hidden>
  <section class="comparison-card" id="comparison" aria-label="Line count summary" aria-busy="false"><div class="main-count"><div class="metric-label"><span class="mini-mark" id="metric-symbol" aria-hidden="true">≡</span><span id="metric-label">Total lines</span></div><div class="hero-number" id="removed">—</div><div class="reduction-line"><span class="reduction-pill" id="reduction">—</span><span id="reduction-description">text files</span></div><p id="main-scope">All tracked text files</p></div><div class="comparison-detail"><div class="comparison-title"><h2 id="chart-title">By file type</h2><span>Physical lines</span></div><div id="pr-bars" hidden><div class="bar-heading"><div><span class="key before-key"></span>Before <code id="base-sha"></code></div><strong id="before">—</strong></div><div class="track"><div class="bar before-bar" id="before-bar"></div></div><div class="bar-heading"><div><span class="key after-key"></span>After <code id="after-sha"></code></div><strong id="after">—</strong></div><div class="track"><div class="bar after-bar" id="after-bar"></div></div></div><div id="language-bars" class="language-bars"></div><div class="breakdown" id="breakdown"></div><p class="physical-note">Includes comments and blank lines.</p></div></section>
  <p class="table-note" id="excluded-note"></p>

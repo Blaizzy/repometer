@@ -26,9 +26,10 @@ export function parseTarget(value) {
   if (parts.length>2 && !['pull',''].includes(parts[2])) throw new Error('Use a repository, /tree/ folder, or /pull/ URL.');
   return normalizeTarget(target);
 }
-export function targetURL(target, scope='all') {
+export function targetURL(target, scope='all', {hideRemoved=false}={}) {
   const t=normalizeTarget(target), p=new URLSearchParams({repo:t.repository,mode:t.mode});
   if(t.pull)p.set('pr',t.pull);if(t.ref)p.set('ref',t.ref);if(t.directory)p.set('path',t.directory);if(scope!=='all')p.set('scope',scope);
+  if(t.mode==='pr'&&hideRemoved)p.set('hideRemoved','1');
   return '?'+p.toString();
 }
 export function readTarget(search) {

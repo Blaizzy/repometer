@@ -16,3 +16,5 @@
 .is-repo .pr-column{display:none}.hero-number{font-size:clamp(34px,5.4vw,70px)}.home .eyebrow{font-size:12px}.search-result a:focus-visible{outline:3px solid #157b59}
 
 .workspace-nav{display:flex;align-items:center;gap:24px;margin-left:auto;font-size:14px;font-weight:550}.workspace-nav a[aria-current=page]{color:#205a46;text-decoration:underline;text-underline-offset:7px}@media(max-width:760px){.site-header{height:auto;min-height:88px;flex-wrap:wrap;padding-top:16px;padding-bottom:16px;gap:18px}.workspace-nav{gap:18px}}@media(max-width:530px){.workspace-nav{width:100%;margin-left:0;justify-content:space-between}}
+
+.path-filter{display:inline-flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid var(--line);border-radius:6px;background:white;font-size:13px;color:var(--ink);white-space:nowrap}.path-filter input{width:16px;height:16px;margin:0;accent-color:#205a46;flex-shrink:0}.path-filter:has(input:checked){border-color:#8ebba4;background:#edf7f1;color:#205a46}

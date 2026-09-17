@@ -2,12 +2,13 @@ import {githubAccess} from './github-access.mjs?v=13';
 import {mountGitHubAccess} from './auth-ui.mjs?v=13';
 import {mountRepositoryLink} from './repository-link.mjs?v=13';
 import {GithubCounter, RefreshLoop} from './live-data.mjs?v=13';
+import {matchesFile} from './file-filters.mjs?v=1';
 import {CountProgress} from './count-progress.mjs?v=1';
-import {normalizeTarget, parseTarget, targetURL, readTarget, folderTotals} from './targets.mjs';
+import {normalizeTarget, parseTarget, targetURL, readTarget, folderTotals} from './targets.mjs?v=2';
 const $=id=>document.getElementById(id),set=(id,text)=>{$(id).textContent=text;},num=n=>new Intl.NumberFormat('en-US').format(n),signed=n=>n<0?'−'+num(-n):n>0?'+'+num(n):'0';
 const caches=new Map(),progress=new CountProgress($('count-progress'));
 const accessReady=githubAccess.initialize();
-let target=null,snapshot=null,counter=null,loop=null,searchCounter=null,generation=0,scope='all',fileType='',sort='after',fileQuery='';
+let target=null,snapshot=null,counter=null,loop=null,searchCounter=null,generation=0,scope='all',fileType='',sort='after',fileQuery='',hideRemoved=false;
 const typeNames={'.py':'Python','.json':'JSON','.md':'Markdown','.js':'JavaScript','.mjs':'JavaScript modules','.cjs':'CommonJS','.ts':'TypeScript','.tsx':'TSX','.jsx':'JSX','.rs':'Rust','.go':'Go','.c':'C','.cpp':'C++','.h':'C headers','.html':'HTML','.css':'CSS','.scss':'SCSS','.yaml':'YAML','.yml':'YAML','.toml':'TOML','.sh':'Shell','.txt':'Text','.swift':'Swift','.java':'Java','.rb':'Ruby','.ipynb':'Notebooks','.svg':'SVG'};
 const typeName=ext=>typeNames[ext]||ext||'No extension';
 function cacheFor(repository){const key=repository.toLowerCase();if(!caches.has(key))caches.set(key,{blobs:new Map(),trees:new Map(),revisions:new Map(),stats:new Map()});return caches.get(key);}
@@ -15,21 +16,21 @@ function element(tag,cls,text){const el=document.createElement(tag);if(cls)el.cl
 function link(text,href,cls){const a=element('a',cls,text);a.href=href;return a;}
 function external(el,url){el.href=url;el.target='_blank';el.rel='noopener noreferrer';}
 function notice(error){return error instanceof TypeError&&/fetch|network|load failed/i.test(error.message)?'Could not reach GitHub. Check your connection and try again.':error.message;}
-function include(file){return(scope==='all'||file.extension==='.py'||(scope==='source'&&file.extension==='.json'))&&(!fileType||file.extension===(fileType==='__none'?'':fileType))&&file.path.toLowerCase().includes(fileQuery.toLowerCase());}
+function include(file){return matchesFile(file,{mode:target.mode,scope,fileType,query:fileQuery,hideRemoved});}
 function sum(files){return files.reduce((n,f)=>({before:n.before+f.before,after:n.after+f.after}),{before:0,after:0});}
 function setBusy(busy){$('comparison').setAttribute('aria-busy',String(busy));$('count-results').setAttribute('aria-busy',String(busy));$('refresh').disabled=busy;$('retry').disabled=busy;$('cancel').hidden=!busy;$('count-form').querySelector('button[type=submit]').disabled=busy;for(const id of ['file-type','file-search','sort'])$(id).disabled=busy&&!snapshot;}
 function stop(){generation++;loop?.stop();counter?.abort();searchCounter?.abort();loop=null;progress.finish();setBusy(false);}
 function updateMode(){const pr=$('mode').value==='pr';$('ref-field').hidden=pr;$('pr-field').hidden=!pr;$('pr-number').required=pr;}
-function routeURL(t,replace=false){history[replace?'replaceState':'pushState']({},'',targetURL(t,scope));}
+function routeURL(t,replace=false){history[replace?'replaceState':'pushState']({},'',targetURL(t,scope,{hideRemoved}));}
 function breadcrumbs(){
-  const node=$('folder-crumbs');node.replaceChildren(link(target.repository,targetURL({...target,directory:''},scope)));
-  let directory='';for(const part of target.directory.split('/').filter(Boolean)){directory+=(directory?'/':'')+part;node.append(element('span','','/'),link(part,targetURL({...target,directory},scope)));}
+  const node=$('folder-crumbs');node.replaceChildren(link(target.repository,targetURL({...target,directory:''},scope,{hideRemoved})));
+  let directory='';for(const part of target.directory.split('/').filter(Boolean)){directory+=(directory?'/':'')+part;node.append(element('span','','/'),link(part,targetURL({...target,directory},scope,{hideRemoved})));}
 }
 function prepare(){
   $('home').hidden=true;$('workspace').hidden=false;$('load-error').hidden=true;$('count-results').hidden=true;
   $('compare-nav').href='./compare.html?'+new URLSearchParams({left:target.repository,leftRef:target.mode==='repo'?target.ref:'',leftPath:target.directory,scope});
   $('mode').value=target.mode;$('ref').value=target.ref;$('folder').value=target.directory;$('pr-number').value=target.pull||'';updateMode();breadcrumbs();
-  const pr=target.mode==='pr';$('workspace').classList.toggle('is-repo',!pr);
+  const pr=target.mode==='pr';$('workspace').classList.toggle('is-repo',!pr);$('removed-paths-filter').hidden=!pr;$('hide-removed').checked=hideRemoved;
   $('pr-bars').hidden=!pr;$('language-bars').hidden=pr;$('diff-section').hidden=!pr;$('pr-method').hidden=!pr;$('base-revision').hidden=!pr;$('pr-state').hidden=true;
   set('view-label',pr?'PULL REQUEST COMPARISON':target.directory?'FOLDER COUNTS':'REPOSITORY COUNTS');
   set('page-title',pr?'Pull request #'+target.pull:target.directory?target.directory.split('/').pop():target.repository.split('/')[1]);
@@ -69,7 +70,7 @@ function render(){
   const afterFiles=files.filter(f=>f.status!=='removed').length,beforeFiles=files.filter(f=>f.status!=='added').length;
   set('reduction',pr?(before?(removed>0?'−':removed<0?'+':'')+(Math.abs(removed)/before*100).toFixed(1)+'%':after?'New content':'0%'):num(afterFiles));
   set('reduction-description',pr?(removed>0?'fewer lines in this scope':removed<0?'more lines in this scope':'no net change'):'text files in this scope');
-  set('main-scope',(scope==='source'?'Python + JSON':scope==='python'?'Python files':'All text files')+(fileType?' · '+typeName(fileType==='__none'?'':fileType):'')+(fileQuery?' · matching “'+fileQuery+'”':''));
+  set('main-scope',(scope==='source'?'Python + JSON':scope==='python'?'Python files':'All text files')+(fileType?' · '+typeName(fileType==='__none'?'':fileType):'')+(fileQuery?' · matching “'+fileQuery+'”':'')+(pr&&hideRemoved?' · Removed paths hidden':''));
   set('before',num(before));set('after',num(after));set('modules-before',num(beforeFiles));set('modules-after',num(afterFiles));
   $('before-bar').style.width=before/Math.max(before,after,1)*100+'%';$('after-bar').style.width=after/Math.max(before,after,1)*100+'%';
   const types=new Map();for(const f of files)types.set(f.extension,(types.get(f.extension)||0)+f.after);
@@ -82,7 +83,7 @@ function render(){
     if(!chart.length)$('language-bars').append(element('p','table-note','No text files match this scope.'));
   }
   const folders=folderTotals(files,target.directory);$('folders-section').hidden=!folders.length;$('folder-list').replaceChildren();
-  for(const folder of folders){const a=link('',targetURL({...target,directory:folder.path},scope),'folder-card');a.append(element('span','','▱ '+folder.name),element('span','',num(folder.after)+' lines'));$('folder-list').append(a);}
+  for(const folder of folders){const a=link('',targetURL({...target,directory:folder.path},scope,{hideRemoved}),'folder-card');a.append(element('span','','▱ '+folder.name),element('span','',num(folder.after)+' lines'));$('folder-list').append(a);}
   files.sort((a,b)=>sort==='name'?a.path.localeCompare(b.path):sort==='change'?Math.abs(b.delta)-Math.abs(a.delta)||a.path.localeCompare(b.path):b.after-a.after||a.path.localeCompare(b.path));
   const rows=document.createDocumentFragment(),maximum=files.reduce((max,f)=>Math.max(max,pr?Math.abs(f.delta):f.after),1);
   for(const f of files){
@@ -95,13 +96,13 @@ function render(){
   if(!files.length){const tr=element('tr'),td=element('td','load-message','No text files match the selected scope.');td.colSpan=5;tr.append(td);rows.append(tr);}
   $('file-rows').replaceChildren(rows);set('total-before',num(before));set('total-after',num(after));set('total-delta',signed(after-before));set('total-label',fileQuery?'Total matching paths':'Total in selected scope');
   set('file-count','· '+num(afterFiles)+' files'+(pr?' after · '+num(files.length)+' paths compared':''));
-  set('table-note',pr?'Counts follow file paths. Renamed or consolidated files may appear as a removed path and an added path.':'Includes every tracked text file below this path. Counts include nested folders.');
+  set('table-note',pr?(hideRemoved?'Removed paths are hidden. Displayed totals cover the remaining paths. ':'')+'Counts follow file paths. Renamed or consolidated files may appear as a removed path and an added path.':'Includes every tracked text file below this path. Counts include nested folders.');
   set('count-announcement',pr?`${num(before)} lines before, ${num(after)} after. Net change ${signed(after-before)}.`:`${num(after)} lines across ${num(afterFiles)} text files.`);
-  return {repository:target.repository,mode:target.mode,directory:target.directory,scope,before:pr?before:null,after,files:afterFiles,head:snapshot.head};
+  return {repository:target.repository,mode:target.mode,directory:target.directory,scope,hideRemoved:pr&&hideRemoved,before:pr?before:null,after,files:afterFiles,head:snapshot.head};
 }
 async function openTarget(input,{replace=false,writeURL=true}={}){
   let next;try{next=normalizeTarget(input);}catch(error){showFormError(error);return;}
-  stop();target=next;snapshot=null;fileType='';fileQuery='';sort=target.mode==='pr'?'change':'after';const id=generation;
+  stop();target=next;if(target.mode!=='pr')hideRemoved=false;snapshot=null;fileType='';fileQuery='';sort=target.mode==='pr'?'change':'after';const id=generation;
   if(writeURL)routeURL(target,replace);prepare();setBusy(true);progress.begin();set('sync-status','Connecting to GitHub…');
   await accessReady;if(id!==generation)return;
   let progressStage='';
@@ -119,7 +120,7 @@ set('error-message',notice(error)+(permanent?'':' Retrying at '+new Date(retryAt
   await loop.run(true);
 }
 function showFormError(error){$('load-error').hidden=false;set('error-message',notice(error));}
-function home({writeURL=true}={}){$('compare-nav').href='./compare.html';stop();target=null;snapshot=null;$('home').hidden=false;$('workspace').hidden=true;document.title='Repometer · GitHub repositories, folders & pull requests';if(writeURL)history.pushState({},'','./');}
+function home({writeURL=true}={}){$('compare-nav').href='./compare.html';stop();target=null;snapshot=null;hideRemoved=false;$('home').hidden=false;$('workspace').hidden=true;document.title='Repometer · GitHub repositories, folders & pull requests';if(writeURL)history.pushState({},'','./');}
 async function search(value,{writeURL=true}={}){
   home({writeURL:false});const id=generation;
   if(writeURL)history.pushState({},'','?'+new URLSearchParams({q:value}));
@@ -141,9 +142,10 @@ $('refresh').addEventListener('click',()=>{if(!loop||loop.stopped||counter.cance
 $('retry').addEventListener('click',()=>{if(!loop||loop.stopped||counter.cancelled)openTarget(target,{replace:true});else loop.run(true);});
 $('cancel').addEventListener('click',()=>{generation++;loop?.stop();counter?.abort();progress.stop('cancelled');setBusy(false);set('sync-status','Count cancelled. Change the folder or refresh to resume.');});
 document.querySelectorAll('input[name="scope"]').forEach(input=>input.addEventListener('change',()=>{scope=input.value;render();if(target)routeURL(target,true);}));
+$('hide-removed').addEventListener('change',()=>{hideRemoved=$('hide-removed').checked;render();if(target){routeURL(target,true);breadcrumbs();}});
 $('file-type').addEventListener('change',()=>{fileType=$('file-type').value;render();});$('sort').addEventListener('change',()=>{sort=$('sort').value;render();});$('file-search').addEventListener('input',()=>{fileQuery=$('file-search').value;render();});
-document.addEventListener('click',event=>{const a=event.target.closest('a');if(!a||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;const href=a.getAttribute('href');if(href==='./'){event.preventDefault();home();}else if(href?.startsWith('?repo=')){event.preventDefault();const p=new URLSearchParams(href);scope=p.get('scope')||'all';try{openTarget(readTarget(href));}catch(error){showFormError(error);}}});
-function restore(){const p=new URLSearchParams(location.search);scope=['all','source','python'].includes(p.get('scope'))?p.get('scope'):'all';try{const t=readTarget(location.search);if(t)openTarget(t,{writeURL:false});else if(p.get('q'))search(p.get('q'),{writeURL:false});else home({writeURL:false});}catch(error){home({writeURL:false});$('search-feedback').hidden=false;set('search-feedback',notice(error));}}
+document.addEventListener('click',event=>{const a=event.target.closest('a');if(!a||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;const href=a.getAttribute('href');if(href==='./'){event.preventDefault();home();}else if(href?.startsWith('?repo=')){event.preventDefault();const p=new URLSearchParams(href);scope=p.get('scope')||'all';hideRemoved=p.get('hideRemoved')==='1';try{openTarget(readTarget(href));}catch(error){showFormError(error);}}});
+function restore(){const p=new URLSearchParams(location.search);scope=['all','source','python'].includes(p.get('scope'))?p.get('scope'):'all';hideRemoved=p.get('hideRemoved')==='1';try{const t=readTarget(location.search);if(t)openTarget(t,{writeURL:false});else if(p.get('q'))search(p.get('q'),{writeURL:false});else home({writeURL:false});}catch(error){home({writeURL:false});$('search-feedback').hidden=false;set('search-feedback',notice(error));}}
 window.addEventListener('popstate',restore);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loop?.run();});window.addEventListener('focus',()=>loop?.run());window.addEventListener('online',()=>loop?.run(true));window.addEventListener('pagehide',event=>{if(!event.persisted)stop();});
 restore();
 await accessReady;
