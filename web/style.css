@@ -18,3 +18,23 @@
 .workspace-nav{display:flex;align-items:center;gap:24px;margin-left:auto;font-size:14px;font-weight:550}.workspace-nav a[aria-current=page]{color:#205a46;text-decoration:underline;text-underline-offset:7px}@media(max-width:760px){.site-header{height:auto;min-height:88px;flex-wrap:wrap;padding-top:16px;padding-bottom:16px;gap:18px}.workspace-nav{gap:18px}}@media(max-width:530px){.workspace-nav{width:100%;margin-left:0;justify-content:space-between}}
 
 .path-filter{display:inline-flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid var(--line);border-radius:6px;background:white;font-size:13px;color:var(--ink);white-space:nowrap}.path-filter input{width:16px;height:16px;margin:0;accent-color:#205a46;flex-shrink:0}.path-filter:has(input:checked){border-color:#8ebba4;background:#edf7f1;color:#205a46}
+
+
+/* Keep columns independent of the currently visible file paths. */
+.file-table{table-layout:fixed;min-width:620px}
+.file-table thead th.number{width:130px}
+.file-table thead th:nth-child(4){width:145px}
+.files-section .table-wrap{scrollbar-gutter:stable}
+.file-table-heading{flex-wrap:wrap}
+.file-table-heading .table-tools{flex-shrink:0;flex-wrap:nowrap;max-width:100%;margin-left:auto}
+.file-table-heading input[type=search]{width:180px;min-width:0;flex:0 1 180px}
+.file-table-heading .path-filter,.file-table-heading .sort-control{flex-shrink:0;white-space:nowrap}
+@media(max-width:950px){
+  .file-table thead th.number{width:110px}
+  .file-table thead th:nth-child(4){width:130px}
+  .file-table-heading .table-tools{margin-left:0}
+}
+@media(max-width:650px){
+  .file-table-heading .table-tools{flex-wrap:wrap}
+  .file-table-heading input[type=search]{flex:1 1 100%;width:100%;max-width:none}
+}
