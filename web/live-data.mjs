@@ -3,6 +3,7 @@ import {normalizeTarget, extension} from './targets.mjs';
 const SHA=/^[a-f0-9]{40}$/;
 const BINARY=/\.(?:png|jpe?g|gif|webp|ico|avif|heic|pdf|zip|gz|bz2|xz|7z|tar|woff2?|ttf|otf|eot|mp[34]|mov|wav|ogg|flac|npy|npz|safetensors|gguf|pt|pth|onnx|bin|exe|dll|so|dylib|pyc|class|jar|wasm)$/i;
 export const REFRESH_INTERVAL=300_000;
+export const FILE_CONCURRENCY=12;
 export const refreshInterval=()=>githubAccess.state().connected&&!githubAccess.state().invalid?120_000:REFRESH_INTERVAL;
 export function physicalLines(bytes) {
   let count=0;for(const byte of bytes){if(byte===0)return null;if(byte===10)count++;}
@@ -132,24 +133,33 @@ export class GithubCounter {
     }
     this.progress('listing',{label,revision});
     const {entries:tree,found}=await this.tree(revision),result=new Array(tree.length);
-    let cursor=0,completed=0,excluded=0,textFiles=0,linesSoFar=0,cached=0,failed=false;
+    const pendingBlobs=new Map();
+    let cursor=0,completed=0,excluded=0,textFiles=0,linesSoFar=0,cached=0,failure;
     this.progress('counting',{label,revision,completed,total:tree.length,excluded,textFiles,lines:linesSoFar,cached});
     const worker=async()=>{
-      try{while(cursor<tree.length&&!failed){this.check();const index=cursor++,file=tree[index];
+      try{while(cursor<tree.length&&!failure){this.check();const index=cursor++,file=tree[index];
         if(file.type!=='blob'||file.mode==='120000'||BINARY.test(file.path)){excluded++;}
         else{
           if(!this.blobs.has(file.sha)){
-            const path=file.path.split('/').map(encodeURIComponent).join('/');
-            const lines=await this.request(`https://raw.githubusercontent.com/${this.repository}/${revision}/${path}`,'lines');
-            if(failed)return;this.check();this.blobs.set(file.sha,lines);
+            let pending=pendingBlobs.get(file.sha);
+            if(!pending){
+              const path=file.path.split('/').map(encodeURIComponent).join('/');
+              pending=this.request(`https://raw.githubusercontent.com/${this.repository}/${revision}/${path}`,'lines');
+              pendingBlobs.set(file.sha,pending);
+            }else cached++;
+            const lines=await pending;
+            if(failure)return;this.check();this.blobs.set(file.sha,lines);
           }else cached++;
           const lines=this.blobs.get(file.sha);if(lines===null)excluded++;else{result[index]={path:file.path,sha:file.sha,lines};textFiles++;linesSoFar+=lines;}
         }
         this.progress('counting',{label,revision,completed:++completed,total:tree.length,excluded,textFiles,lines:linesSoFar,cached,path:file.path});
-      }}catch(error){failed=true;throw error;}
+      }}catch(error){
+        if(!failure){failure=error;for(const controller of this.controllers)controller.abort();}
+        throw error;
+      }
     };
-    const workers=await Promise.allSettled(Array.from({length:Math.min(6,tree.length)},worker));
-    const failure=workers.find(w=>w.status==='rejected');if(failure)throw failure.reason;
+    await Promise.allSettled(Array.from({length:Math.min(FILE_CONCURRENCY,tree.length)},worker));
+    if(failure)throw failure;
     const files=result.filter(Boolean);this.revisions.set(key,files);this.stats.set(key,{found,excluded});return files;
   }
   async refresh(previous){return this.mode==='repo'?this.refreshRepository(previous):this.refreshPR(previous);}

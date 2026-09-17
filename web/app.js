@@ -1,7 +1,7 @@
 import {githubAccess} from './github-access.mjs?v=13';
 import {mountGitHubAccess} from './auth-ui.mjs?v=13';
 import {mountRepositoryLink} from './repository-link.mjs?v=13';
-import {GithubCounter, RefreshLoop} from './live-data.mjs?v=13';
+import {GithubCounter, RefreshLoop} from './live-data.mjs?v=14';
 import {matchesFile,filterFileRows} from './file-filters.mjs?v=2';
 import {CountProgress} from './count-progress.mjs?v=1';
 import {normalizeTarget, parseTarget, targetURL, readTarget, folderTotals} from './targets.mjs?v=2';
