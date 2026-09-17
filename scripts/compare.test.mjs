@@ -50,7 +50,35 @@ test('a failed side rejects the entire comparison and a later retry can recover'
   assert.deepEqual(first.map(snapshot=>snapshot.after),[3,4]);f.state.fail=false;assert.deepEqual((await counter.refresh()).map(snapshot=>snapshot.after),[3,4]);
 });
 test('cancellation aborts both in-flight repositories without publishing partial counts',async()=>{
-  let aborted=0;
-  const counter=new ComparisonCounter(selections,{fetchImpl:(_,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{aborted++;reject(new DOMException('cancelled','AbortError'));}))});
+  let aborted=0;const events=[];
+  const counter=new ComparisonCounter(selections,{onProgress:(index,message,detail)=>events.push({index,...detail}),fetchImpl:(_,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>{aborted++;reject(new DOMException('cancelled','AbortError'));}))});
   const pending=counter.refresh();counter.abort();await assert.rejects(pending,{name:'AbortError'});assert.equal(aborted,2);
+  assert.ok(events.every(event=>event.phase!=='complete'));
+});
+
+test('each side reports real progress and completion while the comparison waits for the slower repository',{timeout:5000},async()=>{
+  const f=fixture(),events=[];
+  let releaseRight,finishLeft,published=false;
+  const rightGate=new Promise(resolve=>{releaseRight=resolve;});
+  const leftComplete=new Promise(resolve=>{finishLeft=resolve;});
+  const counter=new ComparisonCounter(selections,{fetchImpl:async(url,options)=>{
+    if(url.startsWith('https://raw.githubusercontent.com/acme/two/'))await rightGate;
+    return f.fetchImpl(url,options);
+  },onProgress(index,message,detail){events.push({index,message,...detail});if(index===0&&detail.phase==='complete')finishLeft();}});
+  const pending=counter.refresh().then(result=>{published=true;return result;});
+  try{
+    await leftComplete;
+    assert.equal(published,false,'Do not publish a mixed or partial comparison');
+    const left=events.find(event=>event.index===0&&event.phase==='complete');
+    assert.equal(left.repository,'acme/one');assert.equal(left.ref,'main');assert.equal(left.completed,2);assert.equal(left.total,2);assert.equal(left.textFiles,2);assert.equal(left.lines,3);
+    assert.ok(events.some(event=>event.index===1&&event.phase==='counting'&&event.completed===0&&event.total===2));
+    assert.ok(!events.some(event=>event.index===1&&event.phase==='complete'));
+    assert.ok(events.some(event=>event.index===0&&event.phase==='counting'&&event.completed===1&&event.path));
+  }finally{releaseRight();}
+  await pending;
+  assert.deepEqual(events.filter(event=>event.phase==='complete').map(event=>[event.index,event.lines]),[[0,3],[1,4]]);
+  const rawCalls=f.calls.filter(url=>url.includes('raw.githubusercontent.com')).length;
+  events.length=0;await counter.refresh();
+  assert.equal(f.calls.filter(url=>url.includes('raw.githubusercontent.com')).length,rawCalls);
+  assert.equal(events.filter(event=>event.phase==='complete').length,2,'Cached refreshes must also complete both progress cards');
 });

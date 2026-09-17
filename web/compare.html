@@ -19,8 +19,8 @@
 <meta name="twitter:image" content="https://blaizzy.github.io/repometer/social-preview.png">
 <meta name="twitter:image:alt" content="Repometer — GitHub line counts for repositories, folders, and pull requests, with a repository comparison illustration.">
 <link rel="icon" type="image/svg+xml" href="./logo.svg">
-<link rel="stylesheet" href="./style.css?v=10"><link rel="stylesheet" href="./compare.css?v=6">
-<script type="module" src="./compare.js?v=14"></script>
+<link rel="stylesheet" href="./style.css?v=10"><link rel="stylesheet" href="./count-progress.css?v=1"><link rel="stylesheet" href="./compare.css?v=7">
+<script type="module" src="./compare.js?v=15"></script>
 <link rel="stylesheet" href="./auth.css?v=13">
 <link rel="stylesheet" href="./repository-link.css">
 </head>
@@ -40,6 +40,20 @@
  <div class="scope-row compare-controls"><fieldset><legend class="visually-hidden">Files to include in both repositories</legend><label><input type="radio" name="compare-scope" value="all" checked><span>All text files</span></label><label><input type="radio" name="compare-scope" value="source"><span>Python + JSON</span></label><label><input type="radio" name="compare-scope" value="python"><span>Python only</span></label></fieldset><label class="type-control" for="compare-type">File type<select id="compare-type"><option value="">All types</option></select></label></div>
  <div class="refresh-row"><p id="compare-status" class="compare-status" role="status">The same file filter applies to both repositories.</p><div class="refresh-actions"><button id="compare-cancel" type="button" hidden>Cancel</button><button id="compare-refresh" type="button" disabled>↻ Refresh now</button></div></div>
  <div id="compare-empty" class="compare-empty">Choose two repositories above to see their line counts side by side.</div>
+ <section id="compare-progress" class="compare-progress" aria-label="Repository counting progress" hidden></section>
+ <template id="compare-progress-template">
+  <article class="count-progress compare-progress-card" hidden>
+   <h2 class="compare-progress-repo"><span class="side-mark" data-side></span><span data-repository></span></h2>
+   <p class="repo-context" data-context></p>
+   <div class="count-progress-heading"><div class="count-progress-intro"><span class="count-progress-mark" aria-hidden="true"><i></i><i></i><i></i></span><div><h3 class="count-progress-title" data-count="title">Connecting to GitHub</h3><p data-count="description">Checking the selected revision.</p></div></div><span class="count-progress-percent" data-count="percent">Preparing…</span></div>
+   <ol class="count-progress-steps" aria-label="Counting steps"><li data-step>Connect</li><li data-step>Find files</li><li data-step>Count lines</li></ol>
+   <progress max="100" data-count="bar"></progress>
+   <dl class="count-progress-stats"><div><dt>Files checked</dt><dd data-count="files">—</dd></div><div><dt>Lines so far</dt><dd data-count="lines">—</dd></div><div><dt>Elapsed</dt><dd data-count="elapsed">0s</dd></div></dl>
+   <p class="count-progress-detail" data-count="detail"></p>
+   <div class="count-progress-current" data-count="current" hidden><span>Last file checked</span><code data-count="path"></code></div>
+   <p class="count-progress-note" data-count="note"></p>
+  </article>
+ </template>
  <section id="compare-results" hidden aria-label="Repository comparison" aria-busy="false">
   <div id="repo-totals" class="repo-totals"></div>
   <section class="difference-summary" aria-label="Difference between repositories"><h2>Difference · B − A</h2><strong id="compare-difference"></strong><p id="compare-percent"></p></section>

@@ -1,13 +1,13 @@
 const number=value=>new Intl.NumberFormat('en-US').format(value);
 
 export function progressView(progress={},elapsed=0){
-  const counting=progress.phase==='counting',total=progress.total||0,completed=progress.completed||0;
-  const percent=counting&&total>0?Math.min(100,Math.floor(completed/total*100)):null;
+  const complete=progress.phase==='complete',counting=progress.phase==='counting'||complete,total=progress.total||0,completed=progress.completed||0;
+  const percent=complete?100:counting&&total>0?Math.min(100,Math.floor(completed/total*100)):null;
   const seconds=Math.max(0,Math.floor(elapsed/1000)),minutes=Math.floor(seconds/60);
   return {
-    title:progress.phase==='listing'?'Finding files':counting?(progress.label==='base'?'Counting the base revision':progress.label==='head'?'Counting the PR head':'Counting your files'):'Connecting to GitHub',
-    description:progress.phase==='listing'?'Finding every tracked file in this folder and its subfolders.':counting?'Reading file contents and counting physical lines.':'Checking the repository and resolving the selected revision.',
-    stage:counting?2:progress.phase==='listing'?1:0,
+    title:complete?'Count complete':progress.phase==='listing'?'Finding files':counting?(progress.label==='base'?'Counting the base revision':progress.label==='head'?'Counting the PR head':'Counting your files'):'Connecting to GitHub',
+    description:complete?'All tracked files in this selection have been checked.':progress.phase==='listing'?'Finding every tracked file in this folder and its subfolders.':counting?'Reading file contents and counting physical lines.':'Checking the repository and resolving the selected revision.',
+    stage:complete?3:counting?2:progress.phase==='listing'?1:0,
     percent,percentLabel:percent===null?'Preparing…':percent+'%',
     files:counting?number(completed)+' / '+number(total):'—',
     lines:counting?number(progress.lines||0):'—',
@@ -35,6 +35,11 @@ export class CountProgress {
     if(!this.active||!value)return;
     this.value=value;
     if(this.frame===null)this.frame=requestAnimationFrame(()=>{this.frame=null;this.render();});
+  }
+  complete(value,{note='This count is complete.'}={}){
+    if(!this.active)return;
+    this.value={...value,phase:'complete',path:''};this.render();this.clear();
+    this.root.dataset.state='complete';this.fields.note.textContent=note;
   }
   render(){
     if(!this.active)return;

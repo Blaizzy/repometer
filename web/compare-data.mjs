@@ -48,7 +48,7 @@ export class ComparisonCounter {
     this.counters=this.selections.map((selection,index)=>{
       const key=selection.repository.toLowerCase();
       if(!this.cache.has(key))this.cache.set(key,{blobs:new Map(),trees:new Map(),revisions:new Map(),stats:new Map()});
-      return new GithubCounter({...selection,...this.resolved[index],mode:'repo',cache:this.cache.get(key),fetchImpl:this.fetchImpl,onProgress:message=>this.onProgress(index,message)});
+      return new GithubCounter({...selection,...this.resolved[index],mode:'repo',cache:this.cache.get(key),fetchImpl:this.fetchImpl,onProgress:(message,detail)=>this.onProgress(index,message,detail)});
     });
     const results=await Promise.allSettled(this.counters.map(async(counter,index)=>{
       try {
@@ -58,7 +58,9 @@ export class ComparisonCounter {
           this.resolved[index]=normalizeTarget({...selection,ref:selection.ref||resolved.ref,directory:selection.directory||resolved.directory});
           Object.assign(counter,this.resolved[index]);
         }
-        return await counter.refresh();
+        const snapshot=await counter.refresh();
+        this.onProgress(index,'Count complete',{phase:'complete',repository:snapshot.repository,directory:snapshot.directory,ref:snapshot.ref,completed:snapshot.files.length+snapshot.excluded,total:snapshot.files.length+snapshot.excluded,textFiles:snapshot.files.length,excluded:snapshot.excluded,lines:snapshot.after});
+        return snapshot;
       } catch(error) {
         if(!failure) {
           failure=error.name==='AbortError'?error:new GithubError('Repository '+(index===0?'A':'B')+' ('+counter.repository+'): '+error.message,error.retryAt||0,error.status||0);

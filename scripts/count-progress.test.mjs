@@ -17,3 +17,10 @@ test('displayed progress tracks actual files, partial lines, and PR revision lab
  assert.match(progressView({phase:'counting',label:'base'}).title,/base revision/);
  assert.match(progressView({phase:'counting',label:'head'}).title,/PR head/);
 });
+
+test('completed repository counts finish every stage, including empty selections',()=>{
+ for(const total of [0,25]){
+  const view=progressView({phase:'complete',completed:total,total,lines:50,textFiles:total},6500);
+  assert.equal(view.percent,100);assert.equal(view.stage,3);assert.equal(view.title,'Count complete');assert.equal(view.files,`${total} / ${total}`);assert.equal(view.elapsed,'6s');
+ }
+});

@@ -2,19 +2,54 @@ import {githubAccess} from './github-access.mjs?v=13';
 import {mountGitHubAccess} from './auth-ui.mjs?v=13';
 import {mountRepositoryLink} from './repository-link.mjs?v=13';
 import {RefreshLoop} from './live-data.mjs?v=14';
-import {ComparisonCounter,parseSelection,comparisonQuery,summarizeComparison} from './compare-data.mjs?v=14';
+import {ComparisonCounter,parseSelection,comparisonQuery,summarizeComparison} from './compare-data.mjs?v=15';
+import {CountProgress} from './count-progress.mjs?v=2';
 import {targetURL} from './targets.mjs';
 
 const $=id=>document.getElementById(id),set=(id,value)=>{$(id).textContent=value;};
 const number=value=>new Intl.NumberFormat('en-US').format(value),signed=value=>value>0?'+'+number(value):value<0?'−'+number(-value):'0';
 const sides=['left','right'],cache=new Map();
+const progress=sides.map((side,index)=>{
+  const card=$('compare-progress-template').content.firstElementChild.cloneNode(true);
+  card.id=side+'-count-progress';card.setAttribute('aria-labelledby',side+'-loading-repo');
+  card.querySelector('.compare-progress-repo').id=side+'-loading-repo';
+  card.querySelector('[data-side]').textContent=index?'B':'A';
+  card.querySelector('[data-side]').classList.toggle('side-b',!!index);
+  card.querySelector('progress').setAttribute('aria-label','Repository '+(index?'B':'A')+' files checked');
+  $('compare-progress').append(card);return new CountProgress(card);
+});
+let progressStages=[];
 let loader=null,loop=null,generation=0,snapshots=null,selections=null,scope='all',fileType='',dirty=false;
 const names={'.py':'Python','.json':'JSON','.md':'Markdown','.js':'JavaScript','.ts':'TypeScript','.tsx':'TSX','.jsx':'JSX','.rs':'Rust','.go':'Go','.c':'C','.cpp':'C++','.h':'C headers','.html':'HTML','.css':'CSS','.swift':'Swift','.java':'Java','.rb':'Ruby','.txt':'Text','.sh':'Shell','.ipynb':'Notebooks'};
 const typeName=extension=>names[extension]?(names[extension]+' ('+extension+')'):extension||'No extension';
 function node(tag,className,text){const item=document.createElement(tag);if(className)item.className=className;if(text!==undefined)item.textContent=text;return item;}
 function anchor(text,url,className,external=false){const a=node('a',className,text);a.href=url;if(external){a.target='_blank';a.rel='noopener noreferrer';}return a;}
-function stop(){generation++;loop?.stop();loader?.abort();loop=null;}
-function busy(value){$('compare-submit').disabled=value;sides.forEach(side=>$(side+'-fields').disabled=value);$('compare-cancel').hidden=!value;$('compare-refresh').disabled=value||!selections||dirty;$('compare-retry').disabled=value;$('compare-results').setAttribute('aria-busy',String(value));}
+function finishProgress(){progress.forEach(view=>view.finish());$('compare-progress').hidden=true;}
+function stop({hideProgress=true}={}){generation++;loop?.stop();loader?.abort();loop=null;if(hideProgress)finishProgress();}
+function busy(value){$('compare-submit').disabled=value;set('compare-submit',value?'Comparing…':'Compare repositories');sides.forEach(side=>$(side+'-fields').disabled=value);$('compare-cancel').hidden=!value;$('compare-refresh').disabled=value||!selections||dirty;$('compare-retry').disabled=value;$('compare-type').disabled=!snapshots;$('compare-results').setAttribute('aria-busy',String(value));}
+function progressContext(index,detail=selections[index]){
+  const card=progress[index].root;
+  card.querySelector('[data-repository]').textContent=detail.repository||selections[index].repository;
+  card.querySelector('[data-context]').textContent=(detail.ref||selections[index].ref||'Default branch')+' · '+((detail.directory??selections[index].directory)||'Entire repository');
+}
+function beginProgress(){
+  progressStages=[];$('compare-empty').hidden=true;$('compare-progress').hidden=false;
+  progress.forEach((view,index)=>{progressContext(index);view.begin({hasSnapshot:!!snapshots});set(sides[index]+'-progress','Connecting to GitHub…');});
+}
+function updateProgress(index,message,detail){
+  if(!detail)return;
+  if(detail.phase==='complete')progress[index].complete(detail,{note:'Ready. Waiting for the other repository to finish.'});
+  else progress[index].update(detail);
+  if(progressStages[index]!==detail.phase){progressContext(index,detail);progressStages[index]=detail.phase;set(sides[index]+'-progress',message.split(' · ')[0]);}
+  if(detail.phase==='complete')set('compare-status','Repository '+(index?'B':'A')+' is ready · waiting for '+(index?'A':'B')+'.'+(snapshots?' Showing the last complete comparison.':''));
+}
+function pauseProgress(state){
+  progress.forEach(view=>{
+    if(view.root.dataset.state==='complete')view.fields.note.textContent=state==='cancelled'?'This repository finished. The comparison was cancelled.':'This repository finished. Retry to complete the comparison.';
+    else view.stop(state);
+  });
+  if(snapshots)$('compare-progress').hidden=true;
+}
 function hideError(){$('compare-error').hidden=true;}
 function errorMessage(error){return /fetch|network|load failed/i.test(error.message)?'Could not reach GitHub. Check your connection and try again.':error.message;}
 function showError(error,retry=false){$('compare-error').hidden=false;set('compare-error-message',errorMessage(error));$('compare-retry').hidden=!retry;}
@@ -46,17 +81,17 @@ function render(){
 function setTypes(){const extensions=[...new Set(snapshots.flatMap(snapshot=>snapshot.files.map(file=>file.extension)))].sort();if(fileType&&!extensions.includes(fileType==='__none'?'':fileType))fileType='';$('compare-type').replaceChildren(new Option('All types',''),...extensions.map(extension=>new Option(typeName(extension),extension||'__none')));$('compare-type').value=fileType;}
 async function start(next,{keep=false,writeURL=true}={}){
   stop();selections=next;dirty=false;hideError();const current=generation;
-  if(!keep){snapshots=null;fileType='';$('compare-results').hidden=true;$('compare-empty').hidden=false;set('compare-empty','Counting both repositories. Large repositories can take a few minutes.');$('compare-type').replaceChildren(new Option('All types',''));}
+  if(!keep){snapshots=null;fileType='';$('compare-results').hidden=true;$('compare-empty').hidden=true;$('compare-type').replaceChildren(new Option('All types',''));}
   if(writeURL&&!next.some(selection=>selection.treeTail))syncURL();
-  loader=new ComparisonCounter(next,{cache,onProgress(index,message){if(current===generation)set(sides[index]+'-progress',message);}});const active=loader;
-  loop=new RefreshLoop({refresh:()=>active.refresh(),visible:()=>document.visibilityState==='visible',onStart(){if(current!==generation)return;hideError();busy(true);set('compare-status',snapshots?'Checking both repositories · showing the last complete comparison.':'Counting both repositories…');},onSuccess(result){if(current!==generation)return;snapshots=result;selections=result.map(snapshot=>({repository:snapshot.repository,mode:'repo',ref:snapshot.ref,directory:snapshot.directory}));sides.forEach((side,index)=>{set(side+'-progress','Count complete');$(side+'-repo').value=selections[index].repository;$(side+'-ref').value=selections[index].ref;$(side+'-path').value=selections[index].directory;});setTypes();render();busy(false);syncURL(true);set('compare-status','Up to date · checks both repositories every '+(githubAccess.state().connected?'2':'5')+' min');},onError(error,retryAt){if(current!==generation)return;busy(false);sides.forEach(side=>set(side+'-progress',''));const permanent=[400,401,404,409].includes(error.status);if(permanent)loop.stop();showError(error,true);if(error.retryAt>Date.now()){$('compare-retry').disabled=true;$('compare-refresh').disabled=true;setTimeout(()=>{if(current===generation){$('compare-retry').disabled=false;$('compare-refresh').disabled=dirty;loop?.run();}},error.retryAt-Date.now()+100);}
-set('compare-status',(snapshots?'Previous comparison remains visible. ':'')+(permanent?'Edit the selection or try again.':'Retrying at '+new Date(retryAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'.'));if(!snapshots)set('compare-empty','The comparison could not finish. Check the selections above or try again.');}});
+  loader=new ComparisonCounter(next,{cache,onProgress(index,message,detail){if(current===generation)updateProgress(index,message,detail);}});const active=loader;
+  loop=new RefreshLoop({refresh:()=>active.refresh(),visible:()=>document.visibilityState==='visible',onStart(){if(current!==generation)return;hideError();busy(true);beginProgress();set('compare-status',snapshots?'Checking both repositories · showing the last complete comparison.':'Counting both repositories…');},onSuccess(result){if(current!==generation)return;snapshots=result;selections=result.map(snapshot=>({repository:snapshot.repository,mode:'repo',ref:snapshot.ref,directory:snapshot.directory}));sides.forEach((side,index)=>{set(side+'-progress','Count complete');$(side+'-repo').value=selections[index].repository;$(side+'-ref').value=selections[index].ref;$(side+'-path').value=selections[index].directory;});setTypes();render();finishProgress();busy(false);syncURL(true);set('compare-status','Up to date · checks both repositories every '+(githubAccess.state().connected?'2':'5')+' min');},onError(error,retryAt){if(current!==generation)return;busy(false);pauseProgress('error');sides.forEach(side=>set(side+'-progress',progress[sides.indexOf(side)].root.dataset.state==='complete'?'Count complete':'Count paused'));const permanent=[400,401,404,409].includes(error.status);if(permanent)loop.stop();showError(error,true);if(error.retryAt>Date.now()){$('compare-retry').disabled=true;$('compare-refresh').disabled=true;setTimeout(()=>{if(current===generation){$('compare-retry').disabled=false;$('compare-refresh').disabled=dirty;loop?.run();}},error.retryAt-Date.now()+100);}
+set('compare-status',(snapshots?'Previous comparison remains visible. ':'')+(permanent?'Edit the selection or try again.':'Retrying at '+new Date(retryAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'.'));}});
   await loop.run(true);
 }
 function submit(){try{const next=sides.map(side=>parseSelection($(side+'-repo').value,$(side+'-ref').value,$(side+'-path').value));start(next);}catch(error){stop();busy(false);showError(error);}}
 $('compare-form').addEventListener('submit',event=>{event.preventDefault();submit();});
-$('compare-form').addEventListener('input',()=>{if(!selections)return;dirty=true;stop();busy(false);hideError();sides.forEach(side=>set(side+'-progress',''));set('compare-status','Selection changed. Compare repositories to update the results.');});
-$('compare-cancel').addEventListener('click',()=>{stop();busy(false);sides.forEach(side=>set(side+'-progress','Cancelled'));set('compare-status','Comparison cancelled. Refresh or compare again to resume.');if(!snapshots)set('compare-empty','Comparison cancelled. You can narrow the folders and try again.');});
+$('compare-form').addEventListener('input',()=>{if(!selections)return;dirty=true;stop();busy(false);hideError();sides.forEach(side=>set(side+'-progress',''));set('compare-status','Selection changed. Compare repositories to update the results.');if(!snapshots){$('compare-empty').hidden=false;set('compare-empty','Compare the updated selections to start counting.');}});
+$('compare-cancel').addEventListener('click',()=>{stop({hideProgress:false});pauseProgress('cancelled');busy(false);sides.forEach(side=>set(side+'-progress','Cancelled'));set('compare-status','Comparison cancelled. Refresh or compare again to resume.');});
 function refresh(){if(dirty)return;if(!loop||loop.stopped||loader.cancelled)start(selections,{keep:true,writeURL:false});else loop.run(true);}
 $('compare-refresh').addEventListener('click',refresh);$('compare-retry').addEventListener('click',refresh);
 document.querySelectorAll('input[name="compare-scope"]').forEach(input=>input.addEventListener('change',()=>{scope=input.value;render();if(snapshots&&!dirty)syncURL(true);}));
