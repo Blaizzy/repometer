@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchesFile} from '../web/file-filters.mjs';
+import {matchesFile,filterFileRows} from '../web/file-filters.mjs';
 import {targetURL,readTarget,folderTotals} from '../web/targets.mjs';
 
 const files=[
@@ -13,7 +13,7 @@ const files=[
 ];
 
 test('hide removed paths keeps existing empty files and composes with the other file filters',()=>{
- const select=options=>files.filter(file=>matchesFile(file,{mode:'pr',...options}));
+ const select=options=>filterFileRows(files.filter(file=>matchesFile(file,options)),{mode:'pr',...options});
  assert.equal(select({}).length,6);
  assert.deepEqual(select({hideRemoved:true}).map(file=>file.path),['src/emptied.py','src/new-empty.py','src/kept.py','data/cases.json']);
  assert.deepEqual(select({hideRemoved:true,scope:'python'}).map(file=>file.path),['src/emptied.py','src/new-empty.py','src/kept.py']);
@@ -21,13 +21,17 @@ test('hide removed paths keeps existing empty files and composes with the other 
  assert.deepEqual(select({hideRemoved:true,query:'KEPT'}).map(file=>file.path),['src/kept.py']);
  assert.equal(select({hideRemoved:true,query:'deleted'}).length,0);
  assert.equal(select({hideRemoved:false,query:'deleted'}).length,1);
- assert.equal(files.filter(file=>matchesFile(file,{mode:'repo',hideRemoved:true})).length,6);
+ assert.equal(filterFileRows(files,{mode:'repo',hideRemoved:true}).length,6);
 });
 
-test('filtered totals and folder summaries exclude removed paths without mutating the source count',()=>{
- const original=JSON.stringify(files),filtered=files.filter(file=>matchesFile(file,{mode:'pr',hideRemoved:true}));
- assert.deepEqual(filtered.reduce((sum,file)=>[sum[0]+file.before,sum[1]+file.after],[0,0]),[23,17]);
- assert.deepEqual(folderTotals(filtered).map(folder=>[folder.name,folder.before,folder.after,folder.files]),[['data',8,12,1],['src',15,5,3]]);
+test('hiding removed rows preserves the scoped files used by totals and folder summaries',()=>{
+ const original=JSON.stringify(files),scoped=files.filter(file=>matchesFile(file,{scope:'source'}));
+ const listed=filterFileRows(scoped,{mode:'pr',hideRemoved:true});
+ assert.equal(listed.length,4);assert.equal(scoped.length,5);
+ assert.deepEqual(scoped.reduce((sum,file)=>[sum[0]+file.before,sum[1]+file.after],[0,0]),[43,17]);
+ assert.deepEqual(folderTotals(scoped).map(folder=>[folder.name,folder.before,folder.after,folder.files]),[['data',8,12,1],['src',35,5,4]]);
+ assert.equal(filterFileRows(scoped,{mode:'pr',hideRemoved:false}),scoped);
+ assert.equal(filterFileRows([files[0]],{mode:'pr',hideRemoved:true}).length,0);
  assert.equal(JSON.stringify(files),original);
 });
 

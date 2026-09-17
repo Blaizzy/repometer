@@ -2,7 +2,7 @@ import {githubAccess} from './github-access.mjs?v=13';
 import {mountGitHubAccess} from './auth-ui.mjs?v=13';
 import {mountRepositoryLink} from './repository-link.mjs?v=13';
 import {GithubCounter, RefreshLoop} from './live-data.mjs?v=13';
-import {matchesFile} from './file-filters.mjs?v=1';
+import {matchesFile,filterFileRows} from './file-filters.mjs?v=2';
 import {CountProgress} from './count-progress.mjs?v=1';
 import {normalizeTarget, parseTarget, targetURL, readTarget, folderTotals} from './targets.mjs?v=2';
 const $=id=>document.getElementById(id),set=(id,text)=>{$(id).textContent=text;},num=n=>new Intl.NumberFormat('en-US').format(n),signed=n=>n<0?'−'+num(-n):n>0?'+'+num(n):'0';
@@ -16,7 +16,7 @@ function element(tag,cls,text){const el=document.createElement(tag);if(cls)el.cl
 function link(text,href,cls){const a=element('a',cls,text);a.href=href;return a;}
 function external(el,url){el.href=url;el.target='_blank';el.rel='noopener noreferrer';}
 function notice(error){return error instanceof TypeError&&/fetch|network|load failed/i.test(error.message)?'Could not reach GitHub. Check your connection and try again.':error.message;}
-function include(file){return matchesFile(file,{mode:target.mode,scope,fileType,query:fileQuery,hideRemoved});}
+function include(file){return matchesFile(file,{scope,fileType,query:fileQuery});}
 function sum(files){return files.reduce((n,f)=>({before:n.before+f.before,after:n.after+f.after}),{before:0,after:0});}
 function setBusy(busy){$('comparison').setAttribute('aria-busy',String(busy));$('count-results').setAttribute('aria-busy',String(busy));$('refresh').disabled=busy;$('retry').disabled=busy;$('cancel').hidden=!busy;$('count-form').querySelector('button[type=submit]').disabled=busy;for(const id of ['file-type','file-search','sort'])$(id).disabled=busy&&!snapshot;}
 function stop(){generation++;loop?.stop();counter?.abort();searchCounter?.abort();loop=null;progress.finish();setBusy(false);}
@@ -70,7 +70,7 @@ function render(){
   const afterFiles=files.filter(f=>f.status!=='removed').length,beforeFiles=files.filter(f=>f.status!=='added').length;
   set('reduction',pr?(before?(removed>0?'−':removed<0?'+':'')+(Math.abs(removed)/before*100).toFixed(1)+'%':after?'New content':'0%'):num(afterFiles));
   set('reduction-description',pr?(removed>0?'fewer lines in this scope':removed<0?'more lines in this scope':'no net change'):'text files in this scope');
-  set('main-scope',(scope==='source'?'Python + JSON':scope==='python'?'Python files':'All text files')+(fileType?' · '+typeName(fileType==='__none'?'':fileType):'')+(fileQuery?' · matching “'+fileQuery+'”':'')+(pr&&hideRemoved?' · Removed paths hidden':''));
+  set('main-scope',(scope==='source'?'Python + JSON':scope==='python'?'Python files':'All text files')+(fileType?' · '+typeName(fileType==='__none'?'':fileType):'')+(fileQuery?' · matching “'+fileQuery+'”':''));
   set('before',num(before));set('after',num(after));set('modules-before',num(beforeFiles));set('modules-after',num(afterFiles));
   $('before-bar').style.width=before/Math.max(before,after,1)*100+'%';$('after-bar').style.width=after/Math.max(before,after,1)*100+'%';
   const types=new Map();for(const f of files)types.set(f.extension,(types.get(f.extension)||0)+f.after);
@@ -86,17 +86,18 @@ function render(){
   for(const folder of folders){const a=link('',targetURL({...target,directory:folder.path},scope,{hideRemoved}),'folder-card');a.append(element('span','','▱ '+folder.name),element('span','',num(folder.after)+' lines'));$('folder-list').append(a);}
   files.sort((a,b)=>sort==='name'?a.path.localeCompare(b.path):sort==='change'?Math.abs(b.delta)-Math.abs(a.delta)||a.path.localeCompare(b.path):b.after-a.after||a.path.localeCompare(b.path));
   const rows=document.createDocumentFragment(),maximum=files.reduce((max,f)=>Math.max(max,pr?Math.abs(f.delta):f.after),1);
-  for(const f of files){
+  const listedFiles=filterFileRows(files,{mode:snapshot.mode,hideRemoved});
+  for(const f of listedFiles){
     const tr=element('tr'),name=element('td'),a=link(f.path.slice(target.directory?target.directory.length+1:0),'','file-name');
     external(a,'https://github.com/'+snapshot.repository+'/blob/'+(f.status==='removed'?snapshot.base:snapshot.head)+'/'+f.path.split('/').map(encodeURIComponent).join('/'));name.append(a);
     if(pr&&['added','removed'].includes(f.status))name.append(element('span','file-status',f.status==='added'?'new path':'removed path'));tr.append(name);
     tr.append(element('td','number pr-column',num(f.before)),element('td','number',num(f.after)),element('td','number pr-column '+(f.delta<0?'delta-down':f.delta>0?'delta-up':'zero'),signed(f.delta)));
     const visual=element('td','visual-column'),track=element('div','delta-track'),line=element('div','delta-line'+(pr&&f.delta>0?' increase':'')),value=pr?Math.abs(f.delta):f.after;line.style.width=(value?Math.max(3,value/maximum*58):0)+'px';line.style.minWidth='0';track.append(line);visual.setAttribute('aria-hidden','true');visual.append(track);tr.append(visual);rows.append(tr);
   }
-  if(!files.length){const tr=element('tr'),td=element('td','load-message','No text files match the selected scope.');td.colSpan=5;tr.append(td);rows.append(tr);}
+  if(!listedFiles.length){const tr=element('tr'),td=element('td','load-message',files.length?'All matching paths were removed. Uncheck “Hide removed paths” to show them.':'No text files match the selected scope.');td.colSpan=5;tr.append(td);rows.append(tr);}
   $('file-rows').replaceChildren(rows);set('total-before',num(before));set('total-after',num(after));set('total-delta',signed(after-before));set('total-label',fileQuery?'Total matching paths':'Total in selected scope');
   set('file-count','· '+num(afterFiles)+' files'+(pr?' after · '+num(files.length)+' paths compared':''));
-  set('table-note',pr?(hideRemoved?'Removed paths are hidden. Displayed totals cover the remaining paths. ':'')+'Counts follow file paths. Renamed or consolidated files may appear as a removed path and an added path.':'Includes every tracked text file below this path. Counts include nested folders.');
+  set('table-note',pr?(hideRemoved?'Removed paths are hidden from this list only. Totals include all paths in the selected scope. ':'')+'Counts follow file paths. Renamed or consolidated files may appear as a removed path and an added path.':'Includes every tracked text file below this path. Counts include nested folders.');
   set('count-announcement',pr?`${num(before)} lines before, ${num(after)} after. Net change ${signed(after-before)}.`:`${num(after)} lines across ${num(afterFiles)} text files.`);
   return {repository:target.repository,mode:target.mode,directory:target.directory,scope,hideRemoved:pr&&hideRemoved,before:pr?before:null,after,files:afterFiles,head:snapshot.head};
 }
